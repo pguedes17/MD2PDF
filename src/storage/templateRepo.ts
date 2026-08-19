@@ -47,7 +47,7 @@ export function createTemplateRepo(dir: string): TemplateRepo {
   return {
     async create(input) {
       const now = new Date().toISOString();
-      return save({ ...input, id: `tpl_${nanoid(12)}`, version: 1, createdAt: now, updatedAt: now });
+      return save({ ...input, id: `tpl_${nanoid(12)}`, version: 2, createdAt: now, updatedAt: now });
     },
 
     async get(id) {
@@ -86,7 +86,7 @@ export function createTemplateRepo(dir: string): TemplateRepo {
       return save({
         ...input,
         id: existing.id,
-        version: 1,
+        version: 2,
         createdAt: existing.createdAt,
         updatedAt: new Date().toISOString(),
       });

@@ -129,7 +129,7 @@ describe('TemplateSchema', () => {
     const full = {
       ...TemplateInputSchema.parse(validInput()),
       id: 'tpl_abc123',
-      version: 1,
+      version: 2,
       createdAt: '2026-08-18T10:00:00.000Z',
       updatedAt: '2026-08-18T10:00:00.000Z',
     };

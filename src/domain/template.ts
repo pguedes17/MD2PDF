@@ -246,7 +246,7 @@ export const TemplateInputSchema = TemplateInputBase.superRefine(checkBands);
 /** O template como fica persistido em disco. */
 export const TemplateSchema = TemplateInputBase.extend({
   id: z.string().min(1),
-  version: z.literal(1).default(1),
+  version: z.literal(2).default(2),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 }).superRefine(checkBands);
