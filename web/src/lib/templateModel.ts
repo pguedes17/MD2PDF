@@ -90,6 +90,24 @@ export function describeElement(el: TemplateElement): string {
   }
 }
 
+/** Todas as variáveis `{{nome}}` usadas nos elementos de texto do header/footer,
+ *  em ordem alfabética e sem duplicatas — alimenta a seção "variáveis" do
+ *  editor e o snippet de exemplo de request. */
+const VARIABLE_RE = /\{\{\s*([\w.-]+)\s*\}\}/g;
+
+export function collectVariables(template: TemplateInput | Template): string[] {
+  const names = new Set<string>();
+  for (const band of [template.header, template.footer]) {
+    for (const el of band.elements) {
+      if (el.type !== 'text') continue;
+      for (const match of el.value.matchAll(VARIABLE_RE)) {
+        if (match[1]) names.add(match[1]);
+      }
+    }
+  }
+  return [...names].sort();
+}
+
 /** Todos os assets referenciados, para o preview saber o que buscar. */
 export function collectAssetIds(template: TemplateInput | Template): string[] {
   const ids = new Set<string>();

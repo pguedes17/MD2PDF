@@ -1,8 +1,17 @@
+import { useState } from 'react';
 import type { TemplateInput } from '@shared/domain/template.js';
-import { bandClashes, requiredMarginMm, sheetSizeMm, type BandName } from '../lib/templateModel.js';
+import {
+  bandClashes,
+  collectVariables,
+  requiredMarginMm,
+  sheetSizeMm,
+  type BandName,
+} from '../lib/templateModel.js';
 
 interface PageSettingsProps {
   template: TemplateInput;
+  /** Id do template já persistido — o snippet o injeta no exemplo de request. */
+  templateId?: string;
   onChange: (next: TemplateInput) => void;
 }
 
@@ -52,7 +61,79 @@ function NumberField({
   );
 }
 
-export function PageSettings({ template, onChange }: PageSettingsProps) {
+function VariablesSection({
+  template,
+  templateId,
+}: {
+  template: TemplateInput;
+  templateId?: string;
+}) {
+  const variables = collectVariables(template);
+  const [copied, setCopied] = useState(false);
+
+  const varsBody =
+    variables.length === 0
+      ? '"cliente": "..."'
+      : variables.map((name) => `"${name}": "..."`).join(',\n    ');
+  const snippet = `POST /api/convert
+{
+  "templateId": "${templateId ?? 'tpl_...'}",
+  "markdown": "seu conteúdo",
+  "variables": {
+    ${varsBody}
+  }
+}`;
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(snippet);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // sem clipboard permission — silenciosamente descartado
+    }
+  }
+
+  return (
+    <section className="pane__section">
+      <span className="label pane__title">variáveis</span>
+
+      {variables.length === 0 ? (
+        <p className="hint">
+          Escreva <code className="code">{'{{nome}}'}</code> em qualquer elemento de texto —
+          a variável passa a aparecer aqui e vira campo esperado no request.
+        </p>
+      ) : (
+        <>
+          <div className="varlist">
+            {variables.map((name) => (
+              <span key={name} className="varchip">
+                {name}
+              </span>
+            ))}
+          </div>
+          <p className="hint">
+            Envie cada uma pelo campo <code className="code">variables</code> na hora de converter.
+          </p>
+        </>
+      )}
+
+      <div className="snippet">
+        <button
+          type="button"
+          className="snippet__copy"
+          onClick={() => void copy()}
+          aria-label="copiar exemplo"
+        >
+          {copied ? 'copiado' : 'copiar'}
+        </button>
+        <pre>{snippet}</pre>
+      </div>
+    </section>
+  );
+}
+
+export function PageSettings({ template, templateId, onChange }: PageSettingsProps) {
   const size = sheetSizeMm(template.page);
 
   const setBandHeight = (band: BandName, heightMm: number) =>
@@ -192,6 +273,8 @@ export function PageSettings({ template, onChange }: PageSettingsProps) {
           onChange={(value) => onChange({ ...template, body: { ...template.body, lineHeight: value } })}
         />
       </section>
+
+      <VariablesSection template={template} templateId={templateId} />
     </>
   );
 }

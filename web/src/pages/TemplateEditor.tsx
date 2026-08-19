@@ -114,6 +114,26 @@ export function TemplateEditor({ templateId, onBack }: TemplateEditorProps) {
     }
   }
 
+  async function exportBundle() {
+    if (dirty) {
+      announce('Salve antes de exportar', 'warn');
+      return;
+    }
+    try {
+      const { blob, filename } = await api.exportTemplate(templateId);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.click();
+      // Um tick pra o browser começar o download antes de revogar.
+      setTimeout(() => URL.revokeObjectURL(url), 1_000);
+      announce('Bundle exportado');
+    } catch (err) {
+      announce(err instanceof Error ? err.message : 'não foi possível exportar', 'warn');
+    }
+  }
+
   if (!template) {
     return (
       <>
@@ -159,6 +179,15 @@ export function TemplateEditor({ templateId, onBack }: TemplateEditorProps) {
           )}
           <button
             type="button"
+            className="btn btn--sm btn--quiet"
+            disabled={dirty || blocked}
+            title={dirty ? 'Salve antes de exportar' : 'Exportar bundle .md2pdf.json'}
+            onClick={() => void exportBundle()}
+          >
+            Exportar
+          </button>
+          <button
+            type="button"
             className="btn btn--sm btn--ghost"
             disabled={saving || blocked || !dirty}
             onClick={() => void save().then((ok) => ok && announce('Template salvo'))}
@@ -178,7 +207,7 @@ export function TemplateEditor({ templateId, onBack }: TemplateEditorProps) {
 
       <div className="editor">
         <aside className="pane">
-          <PageSettings template={template} onChange={edit} />
+          <PageSettings template={template} templateId={templateId} onChange={edit} />
         </aside>
 
         <main className="bench">

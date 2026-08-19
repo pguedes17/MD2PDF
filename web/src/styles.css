@@ -1189,6 +1189,66 @@ button {
   --btn-bd: var(--accent);
 }
 
+/* seção "variáveis" no painel esquerdo — chips mono para os nomes coletados */
+.varlist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+
+.varchip {
+  font-family: var(--mono);
+  font-size: 11px;
+  background: var(--chrome-3);
+  color: var(--accent-bright);
+  border: 1px solid var(--chrome-line);
+  border-radius: var(--r-sm);
+  padding: 2px 7px;
+}
+
+/* bloco de exemplo de request com botão copiar no canto */
+.snippet {
+  position: relative;
+  margin-top: 10px;
+  background: var(--chrome);
+  border: 1px solid var(--chrome-line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+
+.snippet pre {
+  margin: 0;
+  padding: 10px 12px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1.55;
+  color: var(--chrome-text);
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.snippet__copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: var(--chrome-3);
+  color: var(--chrome-text-2);
+  border: 1px solid var(--chrome-line);
+  border-radius: var(--r-sm);
+  padding: 2px 7px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: color var(--fast), border-color var(--fast), background var(--fast);
+}
+
+.snippet__copy:hover {
+  color: var(--accent-bright);
+  border-color: var(--accent);
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;

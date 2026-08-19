@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { makeBlankTemplateInput, type Template } from '@shared/domain/template.js';
-import { api } from '../api.js';
+import { api, ApiError } from '../api.js';
 import { Brand, LogoMark } from '../components/Logo.js';
 import { SheetThumb } from '../components/SheetThumb.js';
 
@@ -33,6 +33,8 @@ export function TemplateList({ onOpen }: TemplateListProps) {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   async function reload() {
     try {
@@ -75,6 +77,33 @@ export function TemplateList({ onOpen }: TemplateListProps) {
     setTimeout(() => setCopied(null), 1800);
   }
 
+  async function importBundle(file: File) {
+    setImporting(true);
+    setError(null);
+    try {
+      const text = await file.text();
+      let bundle: unknown;
+      try {
+        bundle = JSON.parse(text);
+      } catch {
+        throw new Error('arquivo não é um JSON válido');
+      }
+      const created = await api.importTemplate(bundle);
+      await reload();
+      onOpen(created.id);
+    } catch (err) {
+      const message =
+        err instanceof ApiError && err.issues?.length
+          ? err.issues.map((issue) => `${issue.path}: ${issue.message}`).join(' · ')
+          : err instanceof Error
+            ? err.message
+            : 'não foi possível importar';
+      setError(message);
+    } finally {
+      setImporting(false);
+    }
+  }
+
   return (
     <>
       <header className="topbar on-dark">
@@ -82,6 +111,25 @@ export function TemplateList({ onOpen }: TemplateListProps) {
         <span className="topbar__divider" />
         <span className="topbar__sub">templates</span>
         <span className="topbar__spacer" />
+        <input
+          ref={importInputRef}
+          type="file"
+          accept="application/json,.json"
+          hidden
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void importBundle(file);
+            event.target.value = '';
+          }}
+        />
+        <button
+          type="button"
+          className="btn btn--sm btn--ghost"
+          disabled={importing}
+          onClick={() => importInputRef.current?.click()}
+        >
+          {importing ? 'Importando...' : 'Importar'}
+        </button>
         <button type="button" className="btn btn--accent" disabled={creating} onClick={() => void create()}>
           {creating ? 'Criando...' : 'Novo template'}
         </button>

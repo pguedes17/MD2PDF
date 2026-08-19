@@ -68,6 +68,26 @@ export const api = {
     }
     return URL.createObjectURL(await response.blob());
   },
+
+  /** Baixa o bundle de exportação como Blob (JSON) + o filename sugerido. */
+  async exportTemplate(id: string): Promise<{ blob: Blob; filename: string }> {
+    const response = await fetch(`/api/templates/${id}/export`);
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new ApiError(response.status, body.message ?? response.statusText, body.issues);
+    }
+    const disposition = response.headers.get('content-disposition') ?? '';
+    const match = /filename="([^"]+)"/.exec(disposition);
+    const filename = match?.[1] ?? 'template.md2pdf.json';
+    return { blob: await response.blob(), filename };
+  },
+
+  /** Importa um bundle já parseado como JSON e devolve o template criado. */
+  importTemplate: (bundle: unknown) =>
+    request<Template>('/api/templates/import', {
+      method: 'POST',
+      body: JSON.stringify(bundle),
+    }),
 };
 
 export const assetUrl = (assetId: string) => `/api/assets/${assetId}`;
