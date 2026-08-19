@@ -144,7 +144,14 @@ function positionInlineStyle(el: TemplateElement): string {
   return parts.join('; ');
 }
 
-function elementInnerHtml(el: TemplateElement, opts: RenderTemplateOptions): string {
+/**
+ * HTML do conteúdo do elemento (imagem, texto, número de página, data),
+ * SEM o wrapper de posicionamento. O editor usa isto para injetar o mesmo
+ * conteúdo que o servidor imprime, mas dentro de um `<div>` React próprio
+ * capaz de capturar o arrasto — assim o clique acerta a área visível do
+ * elemento em vez de um handle sobreposto.
+ */
+export function elementInnerHtml(el: TemplateElement, opts: RenderTemplateOptions = {}): string {
   switch (el.type) {
     case 'image': {
       const dataUri = el.assetId ? opts.assets?.[el.assetId] : undefined;

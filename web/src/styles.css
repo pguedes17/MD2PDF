@@ -989,29 +989,30 @@ button {
   pointer-events: none;
 }
 
-/* handle de elemento — sobrepõe o HTML impresso pelo renderer e captura arrasto */
-.el-handle {
-  border: none;
+/* elemento arrastável: é o próprio conteúdo visual do elemento (texto/imagem),
+   posicionado por elementPosition. O clique acerta a área visível de verdade;
+   o outline aparece só no hover e na seleção, sem esconder o conteúdo. */
+.el-body {
   border-radius: 1mm;
-  background: transparent;
   outline: 1px solid transparent;
-  outline-offset: 0;
+  outline-offset: 1px;
   transition: outline-color var(--fast), background var(--fast);
 }
 
-.el-handle:hover {
-  outline-color: rgb(63 198 209 / 0.4);
-  background: rgb(63 198 209 / 0.08);
+.el-body:hover {
+  outline: 1px dashed rgb(63 198 209 / 0.55);
+  background: rgb(63 198 209 / 0.06);
 }
 
-.el-handle--selected {
+.el-body--selected,
+.el-body--selected:hover {
   outline: 1.5px solid var(--accent);
-  outline-offset: 0.4mm;
   background: rgb(63 198 209 / 0.1);
 }
 
-.el-handle--dragging {
-  outline-color: var(--accent-bright);
+.el-body--dragging,
+.el-body--dragging:hover {
+  outline: 1.5px solid var(--accent-bright);
   background: rgb(63 198 209 / 0.18);
   cursor: grabbing;
 }
@@ -1247,6 +1248,51 @@ button {
 .snippet__copy:hover {
   color: var(--accent-bright);
   border-color: var(--accent);
+}
+
+/* controles de zoom flutuando na parte inferior da bancada; posição fixa
+   para sobreviver à rolagem quando o zoom passa do que cabe na tela. O
+   right leva em conta o pane direito (296px) para não sobrepor. */
+.zoom-bar {
+  position: fixed;
+  bottom: 20px;
+  right: 316px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: var(--chrome);
+  border: 1px solid var(--chrome-line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-md);
+  z-index: 5;
+}
+
+@media (max-width: 1120px) {
+  .zoom-bar {
+    right: 20px;
+  }
+}
+
+.zoom-bar .btn {
+  padding: 3px 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.zoom-bar__value {
+  min-width: 44px;
+  padding: 0 4px;
+  text-align: center;
+  color: var(--chrome-text);
+  font-size: 11px;
+}
+
+.zoom-bar__fit--active,
+.zoom-bar__fit--active:hover:not(:disabled) {
+  --btn-bg: var(--chrome-3);
+  --btn-fg: var(--accent-bright);
+  --btn-bd: var(--accent);
 }
 
 .chips {

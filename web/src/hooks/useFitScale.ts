@@ -17,6 +17,12 @@ interface FitOptions {
    * rolagem para ver o rodapé.
    */
   contentHeightPx?: number;
+  /**
+   * Sobrescreve o cálculo automático. Quando definido, `scale` fica igual a
+   * este número e o hook ignora o tamanho do container. É como o editor
+   * implementa zoom manual sem duplicar o wiring do ResizeObserver.
+   */
+  override?: number;
 }
 
 /**
@@ -26,11 +32,15 @@ interface FitOptions {
  * depois encolher o conjunto para caber na tela.
  */
 export function useFitScale(contentWidthPx: number, options: FitOptions = {}) {
-  const { padding = 0, paddingY = 0, max = 1, contentHeightPx } = options;
+  const { padding = 0, paddingY = 0, max = 1, contentHeightPx, override } = options;
   const ref = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(0);
+  const [scale, setScale] = useState(override ?? 0);
 
   useLayoutEffect(() => {
+    if (override !== undefined) {
+      setScale(override);
+      return;
+    }
     const node = ref.current;
     // O container mede a largura; quem tem altura definida é o pai.
     const box = node?.parentElement ?? node;
@@ -54,7 +64,7 @@ export function useFitScale(contentWidthPx: number, options: FitOptions = {}) {
     measure();
 
     return () => observer.disconnect();
-  }, [contentWidthPx, contentHeightPx, padding, paddingY, max]);
+  }, [contentWidthPx, contentHeightPx, padding, paddingY, max, override]);
 
   return { ref, scale };
 }

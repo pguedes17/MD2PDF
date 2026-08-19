@@ -143,19 +143,30 @@ export function replaceElement(
   );
 }
 
+/** Altura estimada do elemento — mesma fórmula do superRefine do domínio.
+ *  Imagem tem heightMm; texto usa fontSizePt × 0.353 × 1.2. */
+export function estimatedElementHeightMm(el: TemplateElement): number {
+  if (el.type === 'image') return el.heightMm;
+  return el.fontSizePt * 0.353 * 1.2;
+}
+
 /**
  * Aplica um delta de arrasto ao elemento. `dxScreenMm` é o deslocamento
  * na direção da tela (positivo = direita). Para `align='right'` o offset é
  * invertido (positivo puxa para dentro, então arrastar para a direita
  * diminui o offset). Snap para as âncoras acontece dentro de SNAP_ANCHOR_MM.
+ * `yMm` é clampado para [0, bandHeightMm − alturaEstimada] — impede o
+ * elemento de vazar a faixa durante o arrasto (o schema já rejeitava no save).
  */
 export function applyDragDelta(
   origin: TemplateElement,
   dxScreenMm: number,
   dyMm: number,
   usableWidthMm: number,
+  bandHeightMm: number,
 ): TemplateElement {
-  const yMm = Math.max(0, origin.yMm + dyMm);
+  const maxY = Math.max(0, bandHeightMm - estimatedElementHeightMm(origin));
+  const yMm = Math.max(0, Math.min(maxY, origin.yMm + dyMm));
 
   // Posição absoluta atual do elemento na área útil (em mm a partir da esquerda).
   const absoluteXMm = anchorAbsoluteX(origin.align, origin.xOffsetMm, usableWidthMm) + dxScreenMm;
