@@ -451,4 +451,26 @@ describe('/api/fonts', () => {
     const res = await app.inject({ method: 'POST', url: '/api/fonts', payload: mp.payload, headers: mp.headers });
     expect(res.statusCode).toBe(400);
   });
+
+  it('DELETE devolve 409 quando a fonte está referenciada por um template', async () => {
+    // 1. Upload da fonte
+    const ttf = Buffer.alloc(64, 0);
+    const mp = multipartWithField('file', 'FonteReferenciada.ttf', 'font/ttf', ttf, { family: 'FonteReferenciada, sans-serif' });
+    const create = await app.inject({ method: 'POST', url: '/api/fonts', payload: mp.payload, headers: mp.headers });
+    expect(create.statusCode, create.body).toBe(201);
+    const { fontId } = create.json();
+
+    // 2. Cria template que referencia a fonte via body.font.customFontId
+    const tpl = await createTemplate({ body: { font: { customFontId: fontId, family: 'FonteReferenciada, sans-serif' } } });
+    expect(tpl.id).toMatch(/^tpl_/);
+
+    // 3. Tenta apagar a fonte — deve receber 409 font_in_use
+    const del = await app.inject({ method: 'DELETE', url: `/api/fonts/${fontId}` });
+    expect(del.statusCode).toBe(409);
+    expect(del.json().error).toBe('font_in_use');
+
+    // 4. Verifica que a fonte ainda existe
+    const list = await app.inject({ method: 'GET', url: '/api/fonts' });
+    expect(list.json().find((f: any) => f.fontId === fontId)).toBeDefined();
+  });
 });
