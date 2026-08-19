@@ -989,31 +989,61 @@ button {
   pointer-events: none;
 }
 
-.slot {
-  position: absolute;
-  inset: 0;
-  display: flex;
-}
-
-.slot__zone {
-  flex: 1 1 0;
+/* handle de elemento — sobrepõe o HTML impresso pelo renderer e captura arrasto */
+.el-handle {
   border: none;
+  border-radius: 1mm;
   background: transparent;
-  border-right: 1px dashed rgb(11 118 131 / 0.22);
-  transition: background var(--fast);
+  outline: 1px solid transparent;
+  outline-offset: 0;
+  transition: outline-color var(--fast), background var(--fast);
 }
 
-.slot__zone:last-child {
-  border-right: none;
+.el-handle:hover {
+  outline-color: rgb(63 198 209 / 0.4);
+  background: rgb(63 198 209 / 0.08);
 }
 
-.slot__zone:hover {
-  background: rgb(63 198 209 / 0.14);
+.el-handle--selected {
+  outline: 1.5px solid var(--accent);
+  outline-offset: 0.4mm;
+  background: rgb(63 198 209 / 0.1);
 }
 
-.slot__zone--selected {
-  background: rgb(63 198 209 / 0.2);
-  box-shadow: inset 0 0 0 1px var(--accent);
+.el-handle--dragging {
+  outline-color: var(--accent-bright);
+  background: rgb(63 198 209 / 0.18);
+  cursor: grabbing;
+}
+
+/* linha guia vertical que aparece quando o arrasto gruda numa âncora */
+.snap-guide {
+  border-left: 1px dashed var(--accent-bright);
+  width: 0;
+  pointer-events: none;
+  animation: guide-in 120ms var(--ease);
+}
+
+@keyframes guide-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* chip com as coordenadas correntes durante o drag */
+.pos-badge {
+  display: inline-flex;
+  gap: 8px;
+  padding: 3px 7px;
+  background: var(--chrome);
+  color: var(--chrome-text);
+  border-radius: var(--r-sm);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  box-shadow: var(--shadow-sm);
+  white-space: nowrap;
 }
 
 .bodyghost {
@@ -1138,6 +1168,25 @@ button {
 
 .addmenu .btn:hover:not(:disabled) .addmenu__plus {
   color: #ffffff;
+}
+
+/* grupo dos 3 botões de alinhamento no bloco "posição" */
+.align-shortcut {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.align-shortcut .btn {
+  justify-content: center;
+  padding-inline: 6px;
+}
+
+.align-shortcut__active,
+.align-shortcut__active:hover:not(:disabled) {
+  --btn-bg: var(--chrome-3);
+  --btn-fg: var(--accent-bright);
+  --btn-bd: var(--accent);
 }
 
 .chips {
