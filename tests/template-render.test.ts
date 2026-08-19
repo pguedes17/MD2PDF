@@ -283,7 +283,7 @@ describe('renderTemplate — css', () => {
   });
 
   it('aplica a tipografia do corpo', () => {
-    const { css } = renderTemplate(templateWith({ body: { fontFamily: 'Georgia', fontSizePt: 13, color: '#222222', lineHeight: 1.7 } }));
+    const { css } = renderTemplate(templateWith({ body: { font: { family: 'Georgia' }, fontSizePt: 13, color: '#222222', lineHeight: 1.7 } }));
     expect(css).toContain('Georgia');
     expect(css).toContain('13pt');
     expect(css).toContain('#222222');

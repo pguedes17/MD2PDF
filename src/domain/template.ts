@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DEFAULT_FONT_FAMILY } from './fontPresets.js';
 
 /**
  * Fonte da verdade do formato de template. O servidor valida com estes schemas,
@@ -83,8 +84,13 @@ const PageSchema = z.object({
   }),
 });
 
+const BodyFontSchema = z.object({
+  family: z.string().min(1).default(DEFAULT_FONT_FAMILY),
+  customFontId: z.string().regex(/^fnt_[A-Za-z0-9_-]{12}$/, 'customFontId inválido').optional(),
+});
+
 const BodySchema = z.object({
-  fontFamily: z.string().default("system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"),
+  font: BodyFontSchema.prefault({}),
   fontSizePt: fontSizePt.default(11),
   color: hexColor.default('#111111'),
   lineHeight: z.number().min(1).max(3).default(1.5),

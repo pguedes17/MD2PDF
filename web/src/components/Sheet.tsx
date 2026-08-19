@@ -248,7 +248,7 @@ function Band({
   const bandInlineStyle: React.CSSProperties = {
     height: `${heightMm}mm`,
     padding: `0 ${margins.right}mm 0 ${margins.left}mm`,
-    fontFamily: template.body.fontFamily,
+    fontFamily: template.body.font.family,
     fontSize: '9pt',
     lineHeight: 1.2,
   };

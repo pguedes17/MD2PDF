@@ -6,6 +6,7 @@ import {
   applyVariables,
   HeadingsSchema,
 } from '../src/domain/template.js';
+import { DEFAULT_FONT_FAMILY } from '../src/domain/fontPresets.js';
 
 const validInput = () => ({
   name: 'Contrato Padrão',
@@ -169,6 +170,28 @@ describe('HeadingsSchema', () => {
   it('template em branco já vem com headings default', () => {
     const t = makeBlankTemplateInput();
     expect(t.headings.h1.fontSizePt).toBe(20);
+  });
+});
+
+describe('BodySchema — font', () => {
+  it('aplica default de family quando body.font vem vazio', () => {
+    const t = makeBlankTemplateInput();
+    expect(t.body.font.family).toBe(DEFAULT_FONT_FAMILY);
+    expect(t.body.font.customFontId).toBeUndefined();
+  });
+
+  it('aceita customFontId válido', () => {
+    const raw = { ...makeBlankTemplateInput() };
+    (raw.body as any).font = { family: 'MinhaFonte, sans-serif', customFontId: 'fnt_abcdefghij12' };
+    const parsed = TemplateInputSchema.parse(raw);
+    expect(parsed.body.font.customFontId).toBe('fnt_abcdefghij12');
+  });
+
+  it('rejeita customFontId em formato inválido', () => {
+    const raw = { ...makeBlankTemplateInput() };
+    (raw.body as any).font = { family: 'X', customFontId: 'lixo' };
+    const res = TemplateInputSchema.safeParse(raw);
+    expect(res.success).toBe(false);
   });
 });
 

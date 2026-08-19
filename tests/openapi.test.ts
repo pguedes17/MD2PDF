@@ -17,10 +17,15 @@ function makeTemplate(overrides: Partial<Template> = {}): Template {
     header: { heightMm: 20, elements: [] },
     footer: { heightMm: 15, elements: [] },
     body: {
-      fontFamily: "system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+      font: { family: "system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" },
       fontSizePt: 11,
       color: '#111111',
       lineHeight: 1.5,
+    },
+    headings: {
+      h1: { color: '#111111', bold: true, fontSizePt: 20 },
+      h2: { color: '#111111', bold: true, fontSizePt: 16 },
+      h3: { color: '#111111', bold: true, fontSizePt: 13 },
     },
     ...overrides,
   };

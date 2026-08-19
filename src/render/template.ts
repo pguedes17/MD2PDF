@@ -193,7 +193,7 @@ function bandHtml(
     'width: 100%',
     `height: ${band.heightMm}mm`,
     `padding: 0 ${margins.right}mm 0 ${margins.left}mm`,
-    `font-family: ${template.body.fontFamily}`,
+    `font-family: ${template.body.font.family}`,
     // O Chromium injeta header/footer num documento com font-size 0; sem um
     // tamanho declarado aqui, qualquer texto some.
     'font-size: 9pt',
@@ -224,7 +224,7 @@ function buildCss(template: TemplateInput): string {
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 body {
-  font-family: ${body.fontFamily};
+  font-family: ${body.font.family};
   font-size: ${body.fontSizePt}pt;
   color: ${body.color};
   line-height: ${body.lineHeight};
