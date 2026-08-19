@@ -57,11 +57,11 @@ Se precisar instalar ou trocar de versão, use o [nvm](https://github.com/nvm-sh
 git clone https://github.com/pguedes17/MD2PDF.git
 cd MD2PDF
 
-npm install              # dependências da API + baixa o Chromium do Playwright
-npm install --prefix web # dependências do editor visual
+npm install   # dependências da API e do editor + baixa o Chromium
 ```
 
-O `npm install` roda um `postinstall` que baixa o Chromium usado para imprimir.
+Um comando só: o `postinstall` baixa o Chromium usado para imprimir e instala as
+dependências do editor.
 São cerca de 300 MB na primeira vez. Se ele falhar (proxy, rede), rode manualmente:
 
 ```bash
@@ -91,21 +91,32 @@ Abra **http://localhost:5173**. O Vite encaminha as chamadas `/api/*` para a por
 ### Produção (um processo só)
 
 ```bash
-npm run build:web   # compila o editor em web/dist
-npm start           # API + editor juntos em http://localhost:3000
+npm start   # compila o editor e sobe tudo em http://localhost:3000
 ```
 
-Quando `web/dist` existe, o próprio servidor passa a servir o editor — então em
-produção é um processo e uma porta.
+O `npm start` roda o build do editor antes de subir, e o próprio servidor serve
+os arquivos compilados — em produção é um processo e uma porta.
+
+Se preferir separar as etapas (num Dockerfile, por exemplo):
+
+```bash
+npm run build:web        # compila o editor em web/dist
+npx tsx src/server.ts    # sobe sem rebuildar
+```
+
+> Os arquivos do editor (`web/dist`) são gerados no build e não vêm no
+> repositório. Se você subir o servidor sem eles, a raiz responde uma página
+> dizendo exatamente isso — a API continua funcionando normalmente.
 
 ### Scripts disponíveis
 
 | Script | O que faz |
 |--------|-----------|
 | `npm run dev` | API com reload automático |
-| `npm start` | API em modo normal |
+| `npm start` | Compila o editor e sobe a API servindo tudo junto |
 | `npm run dev:web` | Editor com HMR (porta 5173) |
 | `npm run build:web` | Compila o editor para `web/dist` |
+| `npm run setup:web` | Instala só as dependências do editor |
 | `npm run build` | Checagem de tipos da API (sem emitir arquivos) |
 | `npm test` | Suíte completa |
 | `npm run test:watch` | Testes em modo watch |
@@ -342,11 +353,12 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev
 COPY . .
-RUN npm install --prefix web && npm run build:web
+RUN npm run setup:web && npm run build:web
 ENV MD2PDF_STORAGE=/data
 VOLUME /data
 EXPOSE 3000
-CMD ["npm", "start"]
+# build já feito acima; sobe direto, sem recompilar a cada container
+CMD ["npx", "tsx", "src/server.ts"]
 ```
 
 Monte um volume em `/data`: é lá que ficam os templates e as imagens. Sem volume,
@@ -370,6 +382,10 @@ O Chromium não foi baixado. Rode `npx playwright install chromium`.
 
 **Conversão devolvendo timeout.**
 Documento muito grande ou markdown patológico. Aumente `CONVERSION_TIMEOUT_MS`.
+
+**A raiz responde "editor não compilado".**
+Os arquivos do editor não vêm no repositório. Rode `npm run build:web` (ou
+simplesmente `npm start`, que já faz isso).
 
 **Uma imagem no Markdown não carrega.**
 Recurso externo é bloqueado de propósito. Embuta a imagem como `data:` URI dentro

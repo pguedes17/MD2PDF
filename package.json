@@ -8,13 +8,15 @@
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "prestart": "npm run build:web",
     "start": "tsx src/server.ts",
     "build": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "dev:web": "npm --prefix web run dev",
     "build:web": "npm --prefix web run build",
-    "postinstall": "playwright install chromium"
+    "setup:web": "npm install --prefix web --no-audit --no-fund",
+    "postinstall": "playwright install chromium && npm run setup:web"
   },
   "dependencies": {
     "@fastify/multipart": "^10.1.1",
