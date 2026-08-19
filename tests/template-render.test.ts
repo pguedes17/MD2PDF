@@ -315,6 +315,48 @@ describe('buildDocumentHtml', () => {
   });
 });
 
+describe('renderTemplate — @font-face', () => {
+  it('embute @font-face no CSS quando fontDataUri é fornecido e há customFontId', () => {
+    const t = makeBlankTemplateInput() as any;
+    t.body.font = { family: 'MinhaFonte, sans-serif', customFontId: 'fnt_abcdefghij12' };
+    const r = renderTemplate(t, { fontDataUri: 'data:font/ttf;base64,AAAA' });
+    expect(r.css).toContain('@font-face');
+    expect(r.css).toContain("font-family: 'MinhaFonte, sans-serif'");
+    expect(r.css).toContain('data:font/ttf;base64,AAAA');
+  });
+
+  it('não emite @font-face quando não há customFontId', () => {
+    const t = makeBlankTemplateInput();
+    const r = renderTemplate(t);
+    expect(r.css).not.toContain('@font-face');
+  });
+
+  it('usa format opentype para data URIs font/otf', () => {
+    const t = makeBlankTemplateInput() as any;
+    t.body.font = { family: 'MinhaFonte', customFontId: 'fnt_abcdefghij12' };
+    const r = renderTemplate(t, { fontDataUri: 'data:font/otf;base64,AAAA' });
+    expect(r.css).toContain("format('opentype')");
+  });
+
+  it('usa format truetype para data URIs font/ttf', () => {
+    const t = makeBlankTemplateInput() as any;
+    t.body.font = { family: 'MinhaFonte', customFontId: 'fnt_abcdefghij12' };
+    const r = renderTemplate(t, { fontDataUri: 'data:font/ttf;base64,AAAA' });
+    expect(r.css).toContain("format('truetype')");
+  });
+
+  it('@font-face também aparece no CSS da capa quando applyHeaderFooter=false', () => {
+    const t = makeBlankTemplateInput() as any;
+    t.body.font = { family: 'MinhaFonte', customFontId: 'fnt_abcdefghij12' };
+    t.cover = {
+      enabled: true, applyHeaderFooter: false,
+      elements: [{ type: 'text', value: 'Capa', align: 'center', xOffsetMm: 0, yMm: 100, fontSizePt: 24, bold: true, color: '#000' }],
+    };
+    const r = renderTemplate(t, { fontDataUri: 'data:font/ttf;base64,AAAA' });
+    expect(r.cover!.html).toContain('@font-face');
+  });
+});
+
 describe('renderTemplate — cover', () => {
   it('não emite cover quando desabilitada', () => {
     const t = makeBlankTemplateInput();

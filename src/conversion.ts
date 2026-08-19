@@ -5,6 +5,7 @@ import { mergePdfs } from './render/pdfMerge.js';
 import type { PdfService } from './render/pdf.js';
 import type { TemplateRepo } from './storage/templateRepo.js';
 import type { AssetRepo } from './storage/assetRepo.js';
+import type { FontRepo } from './storage/fontRepo.js';
 
 export class TemplateNotFoundError extends Error {
   readonly statusCode = 404;
@@ -48,6 +49,7 @@ export function createConversionService(deps: {
   templateRepo: TemplateRepo;
   assetRepo: AssetRepo;
   pdfService: PdfService;
+  fontRepo?: FontRepo;
 }): ConversionService {
   async function resolveAssets(template: Template): Promise<Record<string, string>> {
     const assets: Record<string, string> = {};
@@ -59,14 +61,21 @@ export function createConversionService(deps: {
     return assets;
   }
 
+  async function resolveFontDataUri(template: Template): Promise<string | undefined> {
+    const id = template.body.font.customFontId;
+    if (!id || !deps.fontRepo) return undefined;
+    const uri = await deps.fontRepo.getDataUri(id);
+    return uri ?? undefined;
+  }
+
   async function convertWithTemplate(
     template: Template,
     markdown: string,
     variables?: Record<string, string>,
   ): Promise<Buffer> {
     const assets = await resolveAssets(template);
-    // fontDataUri será resolvido no Task 9; aqui: undefined
-    const rendered = renderTemplate(template, { variables, assets });
+    const fontDataUri = await resolveFontDataUri(template);
+    const rendered = renderTemplate(template, { variables, assets, fontDataUri });
 
     // Caminho 1: capa inline (applyHeaderFooter=true) — a capa é prefixada no
     // bodyHtml e renderizada no mesmo documento com header/footer normais.

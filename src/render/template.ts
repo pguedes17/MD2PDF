@@ -45,6 +45,8 @@ export interface RenderTemplateOptions {
   variables?: Record<string, string>;
   /** assetId -> data: URI. Quem chama resolve o storage; aqui só se consome. */
   assets?: Record<string, string>;
+  /** data: URI da fonte customizada (resolvida pelo conversion service). */
+  fontDataUri?: string;
   now?: Date;
   timeZone?: string;
   /**
@@ -220,7 +222,17 @@ function bandIsEmpty(band: TemplateBand): boolean {
   return band.elements.length === 0;
 }
 
-function buildCss(template: TemplateInput): string {
+function buildFontFace(family: string, dataUri: string): string {
+  const format = dataUri.startsWith('data:font/otf') ? 'opentype' : 'truetype';
+  return `@font-face {
+  font-family: '${family.replace(/'/g, "\\'")}';
+  src: url(${dataUri}) format('${format}');
+  font-weight: normal;
+  font-style: normal;
+}`;
+}
+
+function buildCss(template: TemplateInput, opts: RenderTemplateOptions = {}): string {
   const { body } = template;
   const codeSizePt = Math.max(7, body.fontSizePt - 2);
   const { headings } = template;
@@ -229,7 +241,10 @@ function buildCss(template: TemplateInput): string {
   const h1Rule = `h1 { ${headingRule(headings.h1)} }`;
   const h2Rule = `h2 { ${headingRule(headings.h2)} }`;
   const h3Rule = `h3, h4, h5, h6 { ${headingRule(headings.h3)} }`;
-  return `
+  const fontFace = (body.font.customFontId && opts.fontDataUri)
+    ? buildFontFace(body.font.family, opts.fontDataUri)
+    : '';
+  return `${fontFace ? fontFace + '\n' : ''}
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 body {
@@ -310,7 +325,7 @@ function coverDocumentHtml(
   opts: RenderTemplateOptions,
 ): string {
   return buildDocumentHtml({
-    css: buildCss(template),
+    css: buildCss(template, opts),
     bodyHtml: coverBodyHtml(template, opts),
   });
 }
@@ -345,7 +360,7 @@ export function renderTemplate(
   return {
     headerHtml: bandHtml(header, template, opts),
     footerHtml: bandHtml(footer, template, opts),
-    css: buildCss(template),
+    css: buildCss(template as TemplateInput, opts),
     pdfOptions: {
       format: page.format,
       landscape: page.orientation === 'landscape',

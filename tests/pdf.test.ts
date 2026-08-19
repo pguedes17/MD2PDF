@@ -9,6 +9,7 @@ import { TemplateInputSchema, makeBlankTemplateInput, type TemplateInput } from 
 import { createConversionService } from '../src/conversion.js';
 import { createTemplateRepo } from '../src/storage/templateRepo.js';
 import { createAssetRepo } from '../src/storage/assetRepo.js';
+import { createFontRepo } from '../src/storage/fontRepo.js';
 
 let pdfService: PdfService;
 
@@ -241,5 +242,36 @@ describe('convertWithTemplate — capa', () => {
     const info = await readPdf(buf);
 
     expect(info.numPages).toBe(1);
+  });
+});
+
+describe('convertWithTemplate — fonte customizada', () => {
+  let dir: string;
+  let conversion: ReturnType<typeof createConversionService>;
+  let templateRepo: ReturnType<typeof createTemplateRepo>;
+  let fontRepo: ReturnType<typeof createFontRepo>;
+
+  beforeAll(async () => {
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'md2pdf-font-'));
+    templateRepo = createTemplateRepo(path.join(dir, 'templates'));
+    const assetRepo = createAssetRepo(path.join(dir, 'assets'));
+    fontRepo = createFontRepo(path.join(dir, 'fonts'));
+    conversion = createConversionService({ templateRepo, assetRepo, pdfService, fontRepo });
+  });
+
+  afterAll(async () => {
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  it('quando template referencia fonte custom, o PDF contém a @font-face embutida', async () => {
+    const { readPdf } = await import('./helpers/readPdf.js');
+    const ttf = Buffer.alloc(128, 42); // fake, mas suficiente para embutir
+    const meta = await fontRepo.save({ originalName: 'x.ttf', declaredFamily: 'FonteX, sans-serif', mime: 'font/ttf', data: ttf });
+    const t = makeBlankTemplateInput() as any;
+    t.body.font = { family: 'FonteX, sans-serif', customFontId: meta.id };
+    const template = await templateRepo.create(t);
+    const buf = await conversion.convertWithTemplate(template, '# Corpo');
+    const info = await readPdf(buf);
+    expect(info.numPages).toBeGreaterThan(0);
   });
 });

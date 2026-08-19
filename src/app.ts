@@ -52,6 +52,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       templateRepo: options.templateRepo,
       assetRepo: options.assetRepo,
       pdfService: options.pdfService,
+      fontRepo: options.fontRepo,
     }),
   };
 
