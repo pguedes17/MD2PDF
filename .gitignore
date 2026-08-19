@@ -1,7 +1,8 @@
 node_modules/
-dist/
-storage/
-web/dist/
+/dist/
+# barra inicial: só o storage da raiz, nunca src/storage/
+/storage/
+/web/dist/
 *.log
 .env
 *.tsbuildinfo
