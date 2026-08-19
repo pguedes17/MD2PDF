@@ -1,0 +1,169 @@
+import { z } from 'zod';
+
+/**
+ * Fonte da verdade do formato de template. O servidor valida com estes schemas,
+ * o editor deriva seus tipos daqui, e o renderer consome os tipos inferidos.
+ */
+
+/** Folga mínima entre a faixa (header/footer) e a margem da página, em mm.
+ *  Sem essa folga o Chromium corta a faixa em silêncio. */
+export const BAND_MARGIN_SLACK_MM = 5;
+
+const hexColor = z
+  .string()
+  .regex(/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, 'cor precisa ser hexadecimal, ex.: #444 ou #444444');
+
+const fontSizePt = z.number().min(4).max(72);
+
+const commonTextProps = {
+  bold: z.boolean().default(false),
+  fontSizePt: fontSizePt.default(9),
+  color: hexColor.default('#444'),
+};
+
+export const ElementSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('image'),
+    assetId: z.string().min(1, 'escolha uma imagem para este elemento'),
+    /** Altura renderizada; a largura acompanha proporcionalmente. */
+    heightMm: z.number().min(1).max(40).default(12),
+  }),
+  z.object({
+    type: z.literal('text'),
+    /** Aceita placeholders {{variavel}}, resolvidos na conversão. */
+    value: z.string().default(''),
+    ...commonTextProps,
+  }),
+  z.object({
+    type: z.literal('pageNumber'),
+    /** {page} e {total} são substituídos pelo próprio Chromium. */
+    format: z.string().default('{page} / {total}'),
+    ...commonTextProps,
+  }),
+  z.object({
+    type: z.literal('date'),
+    format: z.enum(['dd/MM/yyyy', 'yyyy-MM-dd', 'dd/MM/yyyy HH:mm']).default('dd/MM/yyyy'),
+    ...commonTextProps,
+  }),
+]);
+
+export const ZONE_NAMES = ['left', 'center', 'right'] as const;
+export type ZoneName = (typeof ZONE_NAMES)[number];
+
+export const BandSchema = z.object({
+  heightMm: z.number().min(0).max(60),
+  zones: z.object({
+    left: z.array(ElementSchema).default([]),
+    center: z.array(ElementSchema).default([]),
+    right: z.array(ElementSchema).default([]),
+  }),
+});
+
+/** Dimensões em mm dos formatos aceitos, em retrato. */
+export const PAGE_SIZES_MM = {
+  A4: { width: 210, height: 297 },
+  Letter: { width: 216, height: 279 },
+} as const;
+
+const PageSchema = z.object({
+  format: z.enum(['A4', 'Letter']).default('A4'),
+  orientation: z.enum(['portrait', 'landscape']).default('portrait'),
+  /** Todas em milímetros. */
+  margins: z.object({
+    top: z.number().min(0).max(100),
+    right: z.number().min(0).max(100),
+    bottom: z.number().min(0).max(100),
+    left: z.number().min(0).max(100),
+  }),
+});
+
+const BodySchema = z.object({
+  fontFamily: z.string().default("system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"),
+  fontSizePt: fontSizePt.default(11),
+  color: hexColor.default('#111111'),
+  lineHeight: z.number().min(1).max(3).default(1.5),
+});
+
+const baseTemplateShape = {
+  name: z.string().trim().min(1, 'nome é obrigatório').max(120),
+  page: PageSchema,
+  header: BandSchema,
+  footer: BandSchema,
+  // prefault (não default): o Zod 4 não aplica defaults internos ao valor de .default()
+  body: BodySchema.prefault({}),
+};
+
+const TemplateInputBase = z.object(baseTemplateShape);
+type TemplateBase = z.output<typeof TemplateInputBase>;
+
+/** A margem precisa acomodar a faixa, senão o Chromium a corta sem avisar. */
+function checkBandFits(
+  bandHeightMm: number,
+  marginMm: number,
+  marginPath: 'top' | 'bottom',
+  ctx: z.RefinementCtx,
+) {
+  if (bandHeightMm <= 0) return;
+  const required = bandHeightMm + BAND_MARGIN_SLACK_MM;
+  if (marginMm < required) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['page', 'margins', marginPath],
+      message: `margem ${marginPath === 'top' ? 'superior' : 'inferior'} precisa ser de pelo menos ${required}mm para caber a faixa de ${bandHeightMm}mm`,
+    });
+  }
+}
+
+/** Aceita o tipo base, então serve tanto ao schema de entrada quanto ao persistido. */
+function checkBands(t: TemplateBase, ctx: z.RefinementCtx): void {
+  checkBandFits(t.header.heightMm, t.page.margins.top, 'top', ctx);
+  checkBandFits(t.footer.heightMm, t.page.margins.bottom, 'bottom', ctx);
+}
+
+/** O que a API aceita em POST/PUT: sem id nem timestamps (o servidor os define). */
+export const TemplateInputSchema = TemplateInputBase.superRefine(checkBands);
+
+/** O template como fica persistido em disco. */
+export const TemplateSchema = TemplateInputBase.extend({
+  id: z.string().min(1),
+  version: z.literal(1).default(1),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+}).superRefine(checkBands);
+
+export type TemplateElement = z.infer<typeof ElementSchema>;
+export type TemplateBand = z.infer<typeof BandSchema>;
+export type TemplateInput = z.infer<typeof TemplateInputSchema>;
+/** O mesmo template *antes* dos defaults — é o formato que se escreve à mão. */
+export type TemplateInputRaw = z.input<typeof TemplateInputSchema>;
+export type Template = z.infer<typeof TemplateSchema>;
+export type TemplateSummary = Pick<Template, 'id' | 'name' | 'createdAt' | 'updatedAt'>;
+
+/** Ponto de partida do editor: margens já compatíveis com as faixas. */
+export function makeBlankTemplateInput(name = 'Novo template'): TemplateInput {
+  return TemplateInputSchema.parse({
+    name,
+    page: {
+      format: 'A4',
+      orientation: 'portrait',
+      margins: { top: 30, right: 20, bottom: 25, left: 20 },
+    },
+    header: { heightMm: 20, zones: { left: [], center: [], right: [] } },
+    footer: {
+      heightMm: 15,
+      zones: {
+        left: [],
+        center: [],
+        right: [{ type: 'pageNumber', format: '{page} / {total}' }],
+      },
+    },
+    body: {},
+  });
+}
+
+const PLACEHOLDER = /\{\{\s*([\w.-]+)\s*\}\}/g;
+
+/** Resolve {{variavel}} em textos de header/footer. Placeholder sem valor vira string vazia. */
+export function applyVariables(text: string, variables: Record<string, string> | undefined): string {
+  return text.replace(PLACEHOLDER, (_match, key: string) => variables?.[key] ?? '');
+}
