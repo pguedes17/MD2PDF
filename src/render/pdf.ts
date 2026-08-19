@@ -8,6 +8,10 @@ export interface ConvertInput {
   footerHtml: string;
   css: string;
   pdfOptions: PdfOptions;
+  /** Se presente, o serviço usa este HTML como o documento inteiro
+   *  (ignorando bodyHtml/css). Serve para a capa, que já vem como
+   *  documento completo do renderer. */
+  fullHtml?: string;
 }
 
 export interface PdfService {
@@ -89,7 +93,8 @@ export function createPdfService(options: PdfServiceOptions = {}): PdfService {
 
       const page = await context.newPage();
       page.setDefaultTimeout(timeoutMs);
-      await page.setContent(buildDocumentHtml({ css: input.css, bodyHtml: input.bodyHtml }), {
+      const html = input.fullHtml ?? buildDocumentHtml({ css: input.css, bodyHtml: input.bodyHtml });
+      await page.setContent(html, {
         waitUntil: 'load',
         timeout: timeoutMs,
       });

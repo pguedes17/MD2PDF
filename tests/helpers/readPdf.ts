@@ -4,6 +4,8 @@ export interface ReadPdf {
   numPages: number;
   /** Texto extraído por página, na ordem. */
   pages: string[];
+  /** Alias de `pages` — texto por página na ordem (para novos testes de capa). */
+  textByPage: string[];
   /** Todo o texto do documento concatenado. */
   text: string;
 }
@@ -32,5 +34,5 @@ export async function readPdf(buffer: Buffer): Promise<ReadPdf> {
   }
   await loadingTask.destroy();
 
-  return { numPages: doc.numPages, pages, text: pages.join('\n') };
+  return { numPages: doc.numPages, pages, textByPage: pages, text: pages.join('\n') };
 }

@@ -1,8 +1,14 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { createPdfService, type PdfService } from '../src/render/pdf.js';
 import { renderTemplate, buildDocumentHtml } from '../src/render/template.js';
 import { renderMarkdown } from '../src/render/markdown.js';
-import { TemplateInputSchema, type TemplateInput } from '../src/domain/template.js';
+import { TemplateInputSchema, makeBlankTemplateInput, type TemplateInput } from '../src/domain/template.js';
+import { createConversionService } from '../src/conversion.js';
+import { createTemplateRepo } from '../src/storage/templateRepo.js';
+import { createAssetRepo } from '../src/storage/assetRepo.js';
 
 let pdfService: PdfService;
 
@@ -158,5 +164,82 @@ describe('pdfService.convert', () => {
       }),
     ).rejects.toThrow();
     await slowService.close();
+  });
+});
+
+describe('convertWithTemplate — capa', () => {
+  let dir: string;
+  let conversion: ReturnType<typeof createConversionService>;
+  let templateRepo: ReturnType<typeof createTemplateRepo>;
+
+  beforeAll(async () => {
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'md2pdf-cover-'));
+    templateRepo = createTemplateRepo(path.join(dir, 'templates'));
+    const assetRepo = createAssetRepo(path.join(dir, 'assets'));
+    conversion = createConversionService({ templateRepo, assetRepo, pdfService });
+  });
+
+  afterAll(async () => {
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  it('gera capa limpa como primeira página, sem header/footer nela', async () => {
+    const { readPdf } = await import('./helpers/readPdf.js');
+    const t = makeBlankTemplateInput('Doc') as any;
+    t.header = {
+      heightMm: 20,
+      elements: [
+        { type: 'text', value: 'CABECALHO', align: 'left', xOffsetMm: 0, yMm: 5, bold: true, fontSizePt: 10, color: '#000' },
+      ],
+    };
+    t.cover = {
+      enabled: true,
+      applyHeaderFooter: false,
+      elements: [
+        { type: 'text', value: 'MEU TITULO', align: 'center', xOffsetMm: 0, yMm: 140, fontSizePt: 32, bold: true, color: '#000' },
+      ],
+    };
+    const template = await templateRepo.create(t);
+    const buf = await conversion.convertWithTemplate(template, '# Página do corpo');
+    const info = await readPdf(buf);
+
+    expect(info.numPages).toBe(2);                                // capa + corpo
+    expect(info.textByPage[0]).toContain('MEU TITULO');           // capa mostra título
+    expect(info.textByPage[0]).not.toContain('CABECALHO');        // capa sem header
+    expect(info.textByPage[1]).toContain('CABECALHO');            // corpo tem header
+  });
+
+  it('capa com applyHeaderFooter=true mantém o header também na página 1', async () => {
+    const { readPdf } = await import('./helpers/readPdf.js');
+    const t = makeBlankTemplateInput('Doc2') as any;
+    t.header = {
+      heightMm: 20,
+      elements: [
+        { type: 'text', value: 'CABECALHO', align: 'left', xOffsetMm: 0, yMm: 5, bold: true, fontSizePt: 10, color: '#000' },
+      ],
+    };
+    t.cover = {
+      enabled: true,
+      applyHeaderFooter: true,
+      elements: [
+        { type: 'text', value: 'CAPA TITULO', align: 'center', xOffsetMm: 0, yMm: 120, fontSizePt: 28, bold: true, color: '#000' },
+      ],
+    };
+    const template = await templateRepo.create(t);
+    const buf = await conversion.convertWithTemplate(template, '# Corpo');
+    const info = await readPdf(buf);
+
+    expect(info.numPages).toBe(2);
+    expect(info.textByPage[0]).toContain('CABECALHO');
+    expect(info.textByPage[0]).toContain('CAPA TITULO');
+  });
+
+  it('sem capa produz um PDF normal de uma página', async () => {
+    const { readPdf } = await import('./helpers/readPdf.js');
+    const template = await templateRepo.create(makeBlankTemplateInput('SemCapa'));
+    const buf = await conversion.convertWithTemplate(template, '# Página única');
+    const info = await readPdf(buf);
+
+    expect(info.numPages).toBe(1);
   });
 });

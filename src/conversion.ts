@@ -1,6 +1,7 @@
 import type { Template } from './domain/template.js';
 import { renderMarkdown } from './render/markdown.js';
 import { renderTemplate } from './render/template.js';
+import { mergePdfs } from './render/pdfMerge.js';
 import type { PdfService } from './render/pdf.js';
 import type { TemplateRepo } from './storage/templateRepo.js';
 import type { AssetRepo } from './storage/assetRepo.js';
@@ -26,11 +27,16 @@ export interface ConversionService {
   convertWithTemplate(template: Template, markdown: string, variables?: Record<string, string>): Promise<Buffer>;
 }
 
-/** Percorre header/footer atrás dos assets que precisam virar data: URI. */
+/** Percorre header/footer e capa atrás dos assets que precisam virar data: URI. */
 function collectAssetIds(template: Template): string[] {
   const ids = new Set<string>();
   for (const band of [template.header, template.footer]) {
     for (const el of band.elements) {
+      if (el.type === 'image') ids.add(el.assetId);
+    }
+  }
+  if (template.cover.enabled) {
+    for (const el of template.cover.elements) {
       if (el.type === 'image') ids.add(el.assetId);
     }
   }
@@ -58,18 +64,36 @@ export function createConversionService(deps: {
     markdown: string,
     variables?: Record<string, string>,
   ): Promise<Buffer> {
-    const rendered = renderTemplate(template, {
-      variables,
-      assets: await resolveAssets(template),
-    });
+    const assets = await resolveAssets(template);
+    // fontDataUri será resolvido no Task 9; aqui: undefined
+    const rendered = renderTemplate(template, { variables, assets });
 
-    return deps.pdfService.convert({
-      bodyHtml: renderMarkdown(markdown),
+    // Caminho 1: capa inline (applyHeaderFooter=true) — a capa é prefixada no
+    // bodyHtml e renderizada no mesmo documento com header/footer normais.
+    // Caminho 2: sem capa — renderiza só o corpo.
+    const bodyHtml = (rendered.coverInlineHtml ?? '') + renderMarkdown(markdown);
+    const bodyPdf = await deps.pdfService.convert({
+      bodyHtml,
       headerHtml: rendered.headerHtml,
       footerHtml: rendered.footerHtml,
       css: rendered.css,
       pdfOptions: rendered.pdfOptions,
     });
+
+    if (!rendered.cover) return bodyPdf;
+
+    // Caminho 3: capa limpa (applyHeaderFooter=false) — a capa é um PDF
+    // separado sem header/footer, depois fundido com o corpo.
+    const coverPdf = await deps.pdfService.convert({
+      bodyHtml: '',
+      headerHtml: '',
+      footerHtml: '',
+      css: '',
+      pdfOptions: rendered.cover.pdfOptions,
+      fullHtml: rendered.cover.html,
+    });
+
+    return mergePdfs([coverPdf, bodyPdf]);
   }
 
   return {
