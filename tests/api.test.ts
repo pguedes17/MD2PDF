@@ -170,19 +170,16 @@ describe('POST /api/convert', () => {
       name: 'Papel timbrado',
       header: {
         heightMm: 22,
-        zones: {
-          left: [{ type: 'image', assetId, heightMm: 10 }],
-          center: [{ type: 'text', value: 'Cliente {{cliente}}' }],
-          right: [],
-        },
+        elements: [
+          { type: 'image', assetId, heightMm: 10, align: 'left', xOffsetMm: 0, yMm: 0 },
+          { type: 'text', value: 'Cliente {{cliente}}', align: 'center', xOffsetMm: 0, yMm: 0 },
+        ],
       },
       footer: {
         heightMm: 15,
-        zones: {
-          left: [],
-          center: [],
-          right: [{ type: 'pageNumber', format: 'Pag {page} de {total}' }],
-        },
+        elements: [
+          { type: 'pageNumber', format: 'Pag {page} de {total}', align: 'right', xOffsetMm: 0, yMm: 0 },
+        ],
       },
       page: { format: 'A4', orientation: 'portrait', margins: { top: 32, right: 20, bottom: 25, left: 20 } },
     });
@@ -261,7 +258,9 @@ describe('POST /api/convert', () => {
       name: 'Órfão',
       header: {
         heightMm: 20,
-        zones: { left: [{ type: 'image', assetId: 'ast_sumiu', heightMm: 10 }], center: [], right: [] },
+        elements: [
+          { type: 'image', assetId: 'ast_sumiu', heightMm: 10, align: 'left', xOffsetMm: 0, yMm: 0 },
+        ],
       },
     });
     const res = await app.inject({

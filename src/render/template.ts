@@ -1,11 +1,9 @@
 import {
   applyVariables,
-  ZONE_NAMES,
   type Template,
   type TemplateBand,
   type TemplateElement,
   type TemplateInput,
-  type ZoneName,
 } from '../domain/template.js';
 
 /**
@@ -114,7 +112,39 @@ function textStyle(el: Extract<TemplateElement, { fontSizePt: number }>): string
   ].join('; ');
 }
 
-function elementHtml(el: TemplateElement, opts: RenderTemplateOptions): string {
+/**
+ * CSS de posicionamento derivado da âncora e do offset — função pura,
+ * consumida também pelo editor no browser (via alias @shared) para desenhar
+ * handles no MESMO ponto em que o renderer coloca o elemento.
+ */
+export function elementPosition(
+  el: Pick<TemplateElement, 'align' | 'xOffsetMm' | 'yMm'>,
+): { top: string; left?: string; right?: string; transform?: string } {
+  const top = `${el.yMm}mm`;
+  switch (el.align) {
+    case 'left':
+      return { top, left: `${el.xOffsetMm}mm` };
+    case 'right':
+      return { top, right: `${el.xOffsetMm}mm` };
+    case 'center':
+      return {
+        top,
+        left: `calc(50% + ${el.xOffsetMm}mm)`,
+        transform: 'translateX(-50%)',
+      };
+  }
+}
+
+function positionInlineStyle(el: TemplateElement): string {
+  const pos = elementPosition(el);
+  const parts = [`top: ${pos.top}`];
+  if (pos.left) parts.push(`left: ${pos.left}`);
+  if (pos.right) parts.push(`right: ${pos.right}`);
+  if (pos.transform) parts.push(`transform: ${pos.transform}`);
+  return parts.join('; ');
+}
+
+function elementInnerHtml(el: TemplateElement, opts: RenderTemplateOptions): string {
   switch (el.type) {
     case 'image': {
       const dataUri = el.assetId ? opts.assets?.[el.assetId] : undefined;
@@ -135,19 +165,9 @@ function elementHtml(el: TemplateElement, opts: RenderTemplateOptions): string {
   }
 }
 
-const ZONE_ALIGN: Record<ZoneName, string> = {
-  left: 'flex-start',
-  center: 'center',
-  right: 'flex-end',
-};
-
-function zoneHtml(
-  elements: TemplateElement[],
-  zone: ZoneName,
-  opts: RenderTemplateOptions,
-): string {
-  const style = `flex: 1 1 0; display: flex; align-items: center; gap: 3mm; justify-content: ${ZONE_ALIGN[zone]}; min-width: 0;`;
-  return `<div style="${style}">${elements.map((el) => elementHtml(el, opts)).join('')}</div>`;
+function elementHtml(el: TemplateElement, opts: RenderTemplateOptions): string {
+  const wrapperStyle = `position: absolute; ${positionInlineStyle(el)};`;
+  return `<div style="${wrapperStyle}">${elementInnerHtml(el, opts)}</div>`;
 }
 
 function bandHtml(
@@ -156,15 +176,15 @@ function bandHtml(
   opts: RenderTemplateOptions,
 ): string {
   const { margins } = template.page;
-  // Padding lateral igual às margens da página: sem isso a faixa fica colada na
-  // borda enquanto o corpo respeita a margem.
-  const style = [
+  // A faixa é uma "caixa" com padding lateral igual às margens da página. Os
+  // elementos vivem num container interno que ocupa exatamente a área útil,
+  // então "left: 0mm" fica na margem esquerda, não na borda da folha.
+  const bandStyle = [
+    'position: relative',
     'box-sizing: border-box',
     'width: 100%',
     `height: ${band.heightMm}mm`,
     `padding: 0 ${margins.right}mm 0 ${margins.left}mm`,
-    'display: flex',
-    'align-items: center',
     `font-family: ${template.body.fontFamily}`,
     // O Chromium injeta header/footer num documento com font-size 0; sem um
     // tamanho declarado aqui, qualquer texto some.
@@ -174,12 +194,13 @@ function bandHtml(
     'print-color-adjust: exact',
   ].join('; ');
 
-  const zones = ZONE_NAMES.map((zone) => zoneHtml(band.zones[zone], zone, opts)).join('');
-  return `<div style="${style}">${zones}</div>`;
+  const innerStyle = `position: absolute; top: 0; bottom: 0; left: ${margins.left}mm; right: ${margins.right}mm;`;
+  const inner = band.elements.map((el) => elementHtml(el, opts)).join('');
+  return `<div style="${bandStyle}"><div style="${innerStyle}">${inner}</div></div>`;
 }
 
 function bandIsEmpty(band: TemplateBand): boolean {
-  return ZONE_NAMES.every((zone) => band.zones[zone].length === 0);
+  return band.elements.length === 0;
 }
 
 function buildCss(template: TemplateInput): string {

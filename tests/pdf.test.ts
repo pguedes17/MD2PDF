@@ -28,19 +28,17 @@ const templateWithBands = (): TemplateInput =>
     },
     header: {
       heightMm: 22,
-      zones: {
-        left: [{ type: 'image', assetId: 'ast_logo', heightMm: 10 }],
-        center: [{ type: 'text', value: 'ACME LOGISTICA' }],
-        right: [],
-      },
+      elements: [
+        { type: 'image', assetId: 'ast_logo', heightMm: 10, align: 'left', xOffsetMm: 0, yMm: 0 },
+        { type: 'text', value: 'ACME LOGISTICA', align: 'center', xOffsetMm: 0, yMm: 0 },
+      ],
     },
     footer: {
       heightMm: 15,
-      zones: {
-        left: [{ type: 'text', value: 'Confidencial' }],
-        center: [],
-        right: [{ type: 'pageNumber', format: 'Pagina {page} de {total}' }],
-      },
+      elements: [
+        { type: 'text', value: 'Confidencial', align: 'left', xOffsetMm: 0, yMm: 0 },
+        { type: 'pageNumber', format: 'Pagina {page} de {total}', align: 'right', xOffsetMm: 0, yMm: 0 },
+      ],
     },
     body: {},
   });

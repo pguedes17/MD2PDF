@@ -1,4 +1,4 @@
-import { ZONE_NAMES, type Template } from './domain/template.js';
+import type { Template } from './domain/template.js';
 import { renderMarkdown } from './render/markdown.js';
 import { renderTemplate } from './render/template.js';
 import type { PdfService } from './render/pdf.js';
@@ -26,14 +26,12 @@ export interface ConversionService {
   convertWithTemplate(template: Template, markdown: string, variables?: Record<string, string>): Promise<Buffer>;
 }
 
-/** Percorre as seis zonas do template atrás dos assets que precisam virar data: URI. */
+/** Percorre header/footer atrás dos assets que precisam virar data: URI. */
 function collectAssetIds(template: Template): string[] {
   const ids = new Set<string>();
   for (const band of [template.header, template.footer]) {
-    for (const zone of ZONE_NAMES) {
-      for (const el of band.zones[zone]) {
-        if (el.type === 'image') ids.add(el.assetId);
-      }
+    for (const el of band.elements) {
+      if (el.type === 'image') ids.add(el.assetId);
     }
   }
   return [...ids];

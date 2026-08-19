@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { renderTemplate, buildDocumentHtml, MissingAssetError } from '../src/render/template.js';
+import {
+  renderTemplate,
+  buildDocumentHtml,
+  MissingAssetError,
+  elementPosition,
+} from '../src/render/template.js';
 import {
   TemplateInputSchema,
   makeBlankTemplateInput,
@@ -13,10 +18,50 @@ function templateWith(over: Partial<TemplateInputRaw> = {}): TemplateInput {
   return TemplateInputSchema.parse({ ...makeBlankTemplateInput('T'), ...over });
 }
 
+describe('elementPosition', () => {
+  it('align=left aplica left e sem transform', () => {
+    expect(elementPosition({ align: 'left', xOffsetMm: 0, yMm: 0 })).toEqual({
+      top: '0mm',
+      left: '0mm',
+    });
+    expect(elementPosition({ align: 'left', xOffsetMm: 5, yMm: 3 })).toEqual({
+      top: '3mm',
+      left: '5mm',
+    });
+  });
+
+  it('align=right aplica right, e offset positivo afasta da borda', () => {
+    expect(elementPosition({ align: 'right', xOffsetMm: 0, yMm: 0 })).toEqual({
+      top: '0mm',
+      right: '0mm',
+    });
+    expect(elementPosition({ align: 'right', xOffsetMm: 5, yMm: 0 })).toEqual({
+      top: '0mm',
+      right: '5mm',
+    });
+  });
+
+  it('align=center usa calc(50% + offset) com translateX(-50%)', () => {
+    expect(elementPosition({ align: 'center', xOffsetMm: 0, yMm: 0 })).toEqual({
+      top: '0mm',
+      left: 'calc(50% + 0mm)',
+      transform: 'translateX(-50%)',
+    });
+    expect(elementPosition({ align: 'center', xOffsetMm: -4, yMm: 2 })).toEqual({
+      top: '2mm',
+      left: 'calc(50% + -4mm)',
+      transform: 'translateX(-50%)',
+    });
+  });
+});
+
 describe('renderTemplate — header/footer', () => {
   it('todo texto carrega font-size explícito (o Chromium usa 0 por padrão)', () => {
     const t = templateWith({
-      header: { heightMm: 20, zones: { left: [{ type: 'text', value: 'ACME' }], center: [], right: [] } },
+      header: {
+        heightMm: 20,
+        elements: [{ type: 'text', value: 'ACME', align: 'left', xOffsetMm: 0, yMm: 0 }],
+      },
     });
     const { headerHtml } = renderTemplate(t);
     expect(headerHtml).toContain('ACME');
@@ -24,27 +69,45 @@ describe('renderTemplate — header/footer', () => {
     expect(headerHtml).toMatch(/font-size:\s*9pt/);
   });
 
-  it('posiciona os elementos nas três zonas', () => {
+  it('emite CSS de posição correto para cada âncora', () => {
     const t = templateWith({
       header: {
         heightMm: 20,
-        zones: {
-          left: [{ type: 'text', value: 'ESQ' }],
-          center: [{ type: 'text', value: 'MEIO' }],
-          right: [{ type: 'text', value: 'DIR' }],
-        },
+        elements: [
+          { type: 'text', value: 'ESQ', align: 'left', xOffsetMm: 0, yMm: 0 },
+          { type: 'text', value: 'MEIO', align: 'center', xOffsetMm: 0, yMm: 0 },
+          { type: 'text', value: 'DIR', align: 'right', xOffsetMm: 0, yMm: 0 },
+        ],
       },
     });
     const { headerHtml } = renderTemplate(t);
+    // ordem no HTML segue ordem no array (a posição visual sai do CSS)
     expect(headerHtml.indexOf('ESQ')).toBeLessThan(headerHtml.indexOf('MEIO'));
     expect(headerHtml.indexOf('MEIO')).toBeLessThan(headerHtml.indexOf('DIR'));
+    expect(headerHtml).toContain('position: absolute');
+    expect(headerHtml).toMatch(/transform:\s*translateX\(-50%\)/);
+    expect(headerHtml).toMatch(/right:\s*0mm/);
+  });
+
+  it('respeita xOffsetMm e yMm no CSS emitido', () => {
+    const t = templateWith({
+      header: {
+        heightMm: 20,
+        elements: [{ type: 'text', value: 'A', align: 'left', xOffsetMm: 7, yMm: 4 }],
+      },
+    });
+    const { headerHtml } = renderTemplate(t);
+    expect(headerHtml).toMatch(/top:\s*4mm/);
+    expect(headerHtml).toMatch(/left:\s*7mm/);
   });
 
   it('usa as classes mágicas do Chromium para a paginação', () => {
     const t = templateWith({
       footer: {
         heightMm: 15,
-        zones: { left: [], center: [], right: [{ type: 'pageNumber', format: 'Página {page} de {total}' }] },
+        elements: [
+          { type: 'pageNumber', format: 'Página {page} de {total}', align: 'right', xOffsetMm: 0, yMm: 0 },
+        ],
       },
     });
     const { footerHtml } = renderTemplate(t);
@@ -58,7 +121,9 @@ describe('renderTemplate — header/footer', () => {
     const t = templateWith({
       header: {
         heightMm: 20,
-        zones: { left: [{ type: 'image', assetId: 'ast_logo', heightMm: 12 }], center: [], right: [] },
+        elements: [
+          { type: 'image', assetId: 'ast_logo', heightMm: 12, align: 'left', xOffsetMm: 0, yMm: 0 },
+        ],
       },
     });
     const { headerHtml } = renderTemplate(t, { assets: { ast_logo: DATA_URI } });
@@ -68,7 +133,12 @@ describe('renderTemplate — header/footer', () => {
 
   it('falha explicitamente quando o asset referenciado sumiu', () => {
     const t = templateWith({
-      header: { heightMm: 20, zones: { left: [{ type: 'image', assetId: 'ast_sumiu', heightMm: 12 }], center: [], right: [] } },
+      header: {
+        heightMm: 20,
+        elements: [
+          { type: 'image', assetId: 'ast_sumiu', heightMm: 12, align: 'left', xOffsetMm: 0, yMm: 0 },
+        ],
+      },
     });
     expect(() => renderTemplate(t, { assets: {} })).toThrow(MissingAssetError);
     try {
@@ -88,7 +158,9 @@ describe('renderTemplate — header/footer', () => {
       ...base,
       header: {
         heightMm: 20,
-        zones: { left: [{ type: 'image', assetId: '', heightMm: 12 }], center: [], right: [] },
+        elements: [
+          { type: 'image', assetId: '', heightMm: 12, align: 'left', xOffsetMm: 0, yMm: 0 },
+        ],
       },
     };
     const { headerHtml } = renderTemplate(t, { assets: {}, missingAsset: 'placeholder' });
@@ -98,14 +170,24 @@ describe('renderTemplate — header/footer', () => {
 
   it('mesmo em modo placeholder, o servidor continua sendo o padrão que falha', () => {
     const t = templateWith({
-      header: { heightMm: 20, zones: { left: [{ type: 'image', assetId: 'ast_x', heightMm: 12 }], center: [], right: [] } },
+      header: {
+        heightMm: 20,
+        elements: [
+          { type: 'image', assetId: 'ast_x', heightMm: 12, align: 'left', xOffsetMm: 0, yMm: 0 },
+        ],
+      },
     });
     expect(() => renderTemplate(t, { assets: {} })).toThrow(MissingAssetError);
   });
 
   it('resolve {{variaveis}} nos textos', () => {
     const t = templateWith({
-      header: { heightMm: 20, zones: { left: [], center: [{ type: 'text', value: 'Cliente: {{cliente}}' }], right: [] } },
+      header: {
+        heightMm: 20,
+        elements: [
+          { type: 'text', value: 'Cliente: {{cliente}}', align: 'center', xOffsetMm: 0, yMm: 0 },
+        ],
+      },
     });
     const { headerHtml } = renderTemplate(t, { variables: { cliente: 'ACME S/A' } });
     expect(headerHtml).toContain('Cliente: ACME S/A');
@@ -113,7 +195,12 @@ describe('renderTemplate — header/footer', () => {
 
   it('escapa HTML vindo de texto e de variável', () => {
     const t = templateWith({
-      header: { heightMm: 20, zones: { left: [], center: [{ type: 'text', value: '{{x}}' }], right: [] } },
+      header: {
+        heightMm: 20,
+        elements: [
+          { type: 'text', value: '{{x}}', align: 'center', xOffsetMm: 0, yMm: 0 },
+        ],
+      },
     });
     const { headerHtml } = renderTemplate(t, { variables: { x: '<img src=x onerror=alert(1)>' } });
     expect(headerHtml).not.toContain('<img src=x');
@@ -125,7 +212,10 @@ describe('renderTemplate — header/footer', () => {
     const build = (format: 'dd/MM/yyyy' | 'yyyy-MM-dd') =>
       renderTemplate(
         templateWith({
-          footer: { heightMm: 15, zones: { left: [{ type: 'date', format }], center: [], right: [] } },
+          footer: {
+            heightMm: 15,
+            elements: [{ type: 'date', format, align: 'left', xOffsetMm: 0, yMm: 0 }],
+          },
         }),
         { now, timeZone: 'UTC' },
       ).footerHtml;
@@ -136,10 +226,24 @@ describe('renderTemplate — header/footer', () => {
   it('mantém o padding lateral alinhado com as margens da página', () => {
     const t = templateWith({
       page: { format: 'A4', orientation: 'portrait', margins: { top: 30, right: 25, bottom: 25, left: 18 } },
-      header: { heightMm: 20, zones: { left: [{ type: 'text', value: 'x' }], center: [], right: [] } },
+      header: {
+        heightMm: 20,
+        elements: [{ type: 'text', value: 'x', align: 'left', xOffsetMm: 0, yMm: 0 }],
+      },
     });
     const { headerHtml } = renderTemplate(t);
     expect(headerHtml).toMatch(/padding:\s*0\s+25mm\s+0\s+18mm/);
+  });
+
+  it('emite a faixa com position: relative para servir de contexto absoluto', () => {
+    const t = templateWith({
+      header: {
+        heightMm: 20,
+        elements: [{ type: 'text', value: 'x', align: 'left', xOffsetMm: 0, yMm: 0 }],
+      },
+    });
+    const { headerHtml } = renderTemplate(t);
+    expect(headerHtml).toMatch(/position:\s*relative/);
   });
 });
 
@@ -157,8 +261,8 @@ describe('renderTemplate — pdfOptions', () => {
 
   it('desliga header/footer quando as duas faixas estão vazias', () => {
     const t = templateWith({
-      header: { heightMm: 0, zones: { left: [], center: [], right: [] } },
-      footer: { heightMm: 0, zones: { left: [], center: [], right: [] } },
+      header: { heightMm: 0, elements: [] },
+      footer: { heightMm: 0, elements: [] },
       page: { format: 'A4', orientation: 'portrait', margins: { top: 20, right: 20, bottom: 20, left: 20 } },
     });
     expect(renderTemplate(t).pdfOptions.displayHeaderFooter).toBe(false);

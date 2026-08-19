@@ -21,42 +21,48 @@ const commonTextProps = {
   color: hexColor.default('#444'),
 };
 
+/** Posição do elemento dentro da faixa. `xOffsetMm` positivo sempre puxa para
+ *  dentro da folha (para longe da borda de âncora em left/right, para a direita
+ *  em center). `yMm` é a distância do topo da faixa. */
+const positionProps = {
+  align: z.enum(['left', 'center', 'right']).default('left'),
+  xOffsetMm: z.number().min(-200).max(200).default(0),
+  yMm: z.number().min(0).max(60).default(0),
+};
+
 export const ElementSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('image'),
     assetId: z.string().min(1, 'escolha uma imagem para este elemento'),
     /** Altura renderizada; a largura acompanha proporcionalmente. */
     heightMm: z.number().min(1).max(40).default(12),
+    ...positionProps,
   }),
   z.object({
     type: z.literal('text'),
     /** Aceita placeholders {{variavel}}, resolvidos na conversão. */
     value: z.string().default(''),
     ...commonTextProps,
+    ...positionProps,
   }),
   z.object({
     type: z.literal('pageNumber'),
     /** {page} e {total} são substituídos pelo próprio Chromium. */
     format: z.string().default('{page} / {total}'),
     ...commonTextProps,
+    ...positionProps,
   }),
   z.object({
     type: z.literal('date'),
     format: z.enum(['dd/MM/yyyy', 'yyyy-MM-dd', 'dd/MM/yyyy HH:mm']).default('dd/MM/yyyy'),
     ...commonTextProps,
+    ...positionProps,
   }),
 ]);
 
-export const ZONE_NAMES = ['left', 'center', 'right'] as const;
-export type ZoneName = (typeof ZONE_NAMES)[number];
-
 export const BandSchema = z.object({
   heightMm: z.number().min(0).max(60),
-  zones: z.object({
-    left: z.array(ElementSchema).default([]),
-    center: z.array(ElementSchema).default([]),
-    right: z.array(ElementSchema).default([]),
-  }),
+  elements: z.array(ElementSchema).default([]),
 });
 
 /** Dimensões em mm dos formatos aceitos, em retrato. */
@@ -95,6 +101,7 @@ const baseTemplateShape = {
 
 const TemplateInputBase = z.object(baseTemplateShape);
 type TemplateBase = z.output<typeof TemplateInputBase>;
+type TemplateElementParsed = z.infer<typeof ElementSchema>;
 
 /** A margem precisa acomodar a faixa, senão o Chromium a corta sem avisar. */
 function checkBandFits(
@@ -114,10 +121,35 @@ function checkBandFits(
   }
 }
 
+/** Altura estimada em mm do elemento — texto usa fontSizePt × 0.353 × 1.2. */
+function estimatedElementHeightMm(el: TemplateElementParsed): number {
+  if (el.type === 'image') return el.heightMm;
+  return el.fontSizePt * 0.353 * 1.2;
+}
+
+function checkElementsFit(
+  band: TemplateBase['header'],
+  bandKey: 'header' | 'footer',
+  ctx: z.RefinementCtx,
+) {
+  band.elements.forEach((el, i) => {
+    const h = estimatedElementHeightMm(el);
+    if (el.yMm + h > band.heightMm + 0.001) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [bandKey, 'elements', i, 'yMm'],
+        message: `elemento não cabe na faixa: yMm (${el.yMm}) + altura (${h.toFixed(1)}) excede ${band.heightMm}mm`,
+      });
+    }
+  });
+}
+
 /** Aceita o tipo base, então serve tanto ao schema de entrada quanto ao persistido. */
 function checkBands(t: TemplateBase, ctx: z.RefinementCtx): void {
   checkBandFits(t.header.heightMm, t.page.margins.top, 'top', ctx);
   checkBandFits(t.footer.heightMm, t.page.margins.bottom, 'bottom', ctx);
+  checkElementsFit(t.header, 'header', ctx);
+  checkElementsFit(t.footer, 'footer', ctx);
 }
 
 /** O que a API aceita em POST/PUT: sem id nem timestamps (o servidor os define). */
@@ -148,14 +180,12 @@ export function makeBlankTemplateInput(name = 'Novo template'): TemplateInput {
       orientation: 'portrait',
       margins: { top: 30, right: 20, bottom: 25, left: 20 },
     },
-    header: { heightMm: 20, zones: { left: [], center: [], right: [] } },
+    header: { heightMm: 20, elements: [] },
     footer: {
       heightMm: 15,
-      zones: {
-        left: [],
-        center: [],
-        right: [{ type: 'pageNumber', format: '{page} / {total}' }],
-      },
+      elements: [
+        { type: 'pageNumber', format: '{page} / {total}', align: 'right', xOffsetMm: 0, yMm: 0 },
+      ],
     },
     body: {},
   });
