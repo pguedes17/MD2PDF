@@ -3,7 +3,6 @@ import { makeBlankTemplateInput, type Template } from '@shared/domain/template.j
 import { api } from '../api.js';
 import { Brand, LogoMark } from '../components/Logo.js';
 import { SheetThumb } from '../components/SheetThumb.js';
-import { ZONE_NAMES } from '@shared/domain/template.js';
 
 interface TemplateListProps {
   onOpen: (id: string) => void;
@@ -19,9 +18,7 @@ function formatDate(iso: string): string {
 
 /** Os fatos que distinguem um template do outro, em uma linha. */
 function facts(template: Template): string[] {
-  const elements = [template.header, template.footer].flatMap((band) =>
-    ZONE_NAMES.flatMap((zone) => band.zones[zone]),
-  );
+  const elements = [template.header, template.footer].flatMap((band) => band.elements);
   const out = [
     `${template.page.format} ${template.page.orientation === 'landscape' ? 'paisagem' : 'retrato'}`,
   ];

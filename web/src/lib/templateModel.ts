@@ -2,24 +2,16 @@ import {
   BAND_MARGIN_SLACK_MM,
   ElementSchema,
   PAGE_SIZES_MM,
-  ZONE_NAMES,
   type Template,
   type TemplateElement,
   type TemplateInput,
-  type ZoneName,
 } from '@shared/domain/template.js';
 
 export type BandName = 'header' | 'footer';
 
-export type Selection =
-  | { kind: 'zone'; band: BandName; zone: ZoneName }
-  | { kind: 'element'; band: BandName; zone: ZoneName; index: number };
-
-export const ZONE_LABEL: Record<ZoneName, string> = {
-  left: 'esquerda',
-  center: 'centro',
-  right: 'direita',
-};
+/** Seleção corrente do editor. `index: null` significa "faixa selecionada,
+ *  nenhum elemento em foco" — abre a lista de elementos no inspector. */
+export type Selection = { band: BandName; index: number | null } | null;
 
 export const BAND_LABEL: Record<BandName, string> = {
   header: 'cabeçalho',
@@ -32,6 +24,11 @@ export const ELEMENT_LABEL: Record<TemplateElement['type'], string> = {
   pageNumber: 'paginação',
   date: 'data',
 };
+
+export const SNAP_ANCHOR_MM = 2;
+export const SNAP_EDGE_MM = 1;
+export const NUDGE_MM = 1;
+export const NUDGE_FINE_MM = 0.25;
 
 /** Dimensões da folha já considerando a orientação. */
 export function sheetSizeMm(page: TemplateInput['page']) {
@@ -56,8 +53,14 @@ export function requiredMarginMm(template: TemplateInput, band: BandName): numbe
   return template[band].heightMm + BAND_MARGIN_SLACK_MM;
 }
 
+/** Largura horizontal útil de uma faixa (folha menos margens laterais). */
+export function bandUsableWidthMm(template: TemplateInput): number {
+  const { width } = sheetSizeMm(template.page);
+  return Math.max(0, width - template.page.margins.left - template.page.margins.right);
+}
+
 /**
- * Elemento novo com os defaults do schema aplicados.
+ * Elemento novo com os defaults do schema aplicados, incluindo posição.
  *
  * A imagem é montada à mão em vez de passar pelo schema: ela nasce sem arquivo,
  * e o schema — corretamente — recusa um `assetId` vazio. O elemento existe no
@@ -65,10 +68,12 @@ export function requiredMarginMm(template: TemplateInput, band: BandName): numbe
  * até lá.
  */
 export function makeElement(type: TemplateElement['type'], assetId?: string): TemplateElement {
+  const position = { align: 'left' as const, xOffsetMm: 0, yMm: 0 };
   if (type === 'image') {
-    return { type, assetId: assetId ?? '', heightMm: 12 };
+    return { type, assetId: assetId ?? '', heightMm: 12, ...position };
   }
-  return ElementSchema.parse(type === 'text' ? { type, value: 'Texto' } : { type });
+  const raw = type === 'text' ? { type, value: 'Texto', ...position } : { type, ...position };
+  return ElementSchema.parse(raw);
 }
 
 /** Resumo de uma linha para a lista do inspector. */
@@ -89,39 +94,109 @@ export function describeElement(el: TemplateElement): string {
 export function collectAssetIds(template: TemplateInput | Template): string[] {
   const ids = new Set<string>();
   for (const band of [template.header, template.footer]) {
-    for (const zone of ZONE_NAMES) {
-      for (const el of band.zones[zone]) {
-        if (el.type === 'image' && el.assetId) ids.add(el.assetId);
-      }
+    for (const el of band.elements) {
+      if (el.type === 'image' && el.assetId) ids.add(el.assetId);
     }
   }
   return [...ids];
 }
 
-type ZoneUpdater = (elements: TemplateElement[]) => TemplateElement[];
+type BandUpdater = (elements: TemplateElement[]) => TemplateElement[];
 
-/** Atualização imutável de uma zona — todo o editor passa por aqui. */
-export function updateZone(
+/** Atualização imutável de uma faixa — todo o editor passa por aqui. */
+export function updateBand(
   template: TemplateInput,
   band: BandName,
-  zone: ZoneName,
-  update: ZoneUpdater,
+  update: BandUpdater,
 ): TemplateInput {
   return {
     ...template,
-    [band]: {
-      ...template[band],
-      zones: { ...template[band].zones, [zone]: update(template[band].zones[zone]) },
-    },
+    [band]: { ...template[band], elements: update(template[band].elements) },
   };
 }
 
 export function replaceElement(
   template: TemplateInput,
-  selection: Extract<Selection, { kind: 'element' }>,
+  selection: { band: BandName; index: number },
   next: TemplateElement,
 ): TemplateInput {
-  return updateZone(template, selection.band, selection.zone, (elements) =>
+  return updateBand(template, selection.band, (elements) =>
     elements.map((el, i) => (i === selection.index ? next : el)),
   );
+}
+
+/**
+ * Aplica um delta de arrasto ao elemento. `dxScreenMm` é o deslocamento
+ * na direção da tela (positivo = direita). Para `align='right'` o offset é
+ * invertido (positivo puxa para dentro, então arrastar para a direita
+ * diminui o offset). Snap para as âncoras acontece dentro de SNAP_ANCHOR_MM.
+ */
+export function applyDragDelta(
+  origin: TemplateElement,
+  dxScreenMm: number,
+  dyMm: number,
+  usableWidthMm: number,
+): TemplateElement {
+  const yMm = Math.max(0, origin.yMm + dyMm);
+
+  // Posição absoluta atual do elemento na área útil (em mm a partir da esquerda).
+  const absoluteXMm = anchorAbsoluteX(origin.align, origin.xOffsetMm, usableWidthMm) + dxScreenMm;
+  const clamped = Math.max(0, Math.min(usableWidthMm, absoluteXMm));
+
+  const distToLeft = clamped;
+  const distToCenter = Math.abs(clamped - usableWidthMm / 2);
+  const distToRight = usableWidthMm - clamped;
+
+  let align = origin.align;
+  let xOffsetMm: number;
+
+  if (distToLeft <= SNAP_ANCHOR_MM && distToLeft <= distToCenter && distToLeft <= distToRight) {
+    align = 'left';
+    xOffsetMm = 0;
+  } else if (
+    distToRight <= SNAP_ANCHOR_MM &&
+    distToRight <= distToLeft &&
+    distToRight <= distToCenter
+  ) {
+    align = 'right';
+    xOffsetMm = 0;
+  } else if (distToCenter <= SNAP_ANCHOR_MM) {
+    align = 'center';
+    xOffsetMm = 0;
+  } else {
+    // Sem snap: mantém a âncora original e ajusta o offset.
+    xOffsetMm = offsetForAbsoluteX(align, clamped, usableWidthMm);
+  }
+
+  return { ...origin, align, xOffsetMm, yMm } as TemplateElement;
+}
+
+function anchorAbsoluteX(
+  align: TemplateElement['align'],
+  xOffsetMm: number,
+  usableWidthMm: number,
+): number {
+  switch (align) {
+    case 'left':
+      return xOffsetMm;
+    case 'right':
+      return usableWidthMm - xOffsetMm;
+    case 'center':
+      return usableWidthMm / 2 + xOffsetMm;
+  }
+}
+
+function offsetForAbsoluteX(
+  align: TemplateElement['align'],
+  absoluteXMm: number,
+  usableWidthMm: number,
+): number {
+  switch (align) {
+    case 'left':
+      return absoluteXMm;
+    case 'right':
+      return usableWidthMm - absoluteXMm;
+    case 'center':
+      return absoluteXMm - usableWidthMm / 2;
+  }
 }
