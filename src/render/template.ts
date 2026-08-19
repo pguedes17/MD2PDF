@@ -1,5 +1,6 @@
 import {
   applyVariables,
+  PAGE_SIZES_MM,
   type Template,
   type TemplateBand,
   type TemplateElement,
@@ -29,6 +30,14 @@ export interface RenderedTemplate {
   footerHtml: string;
   css: string;
   pdfOptions: PdfOptions;
+  cover?: {
+    /** HTML completo (doctype + head + body). */
+    html: string;
+    /** displayHeaderFooter: false, margens = 0 — canvas limpo. */
+    pdfOptions: PdfOptions;
+  };
+  /** Se cover.enabled && cover.applyHeaderFooter, pré-fixar no bodyHtml do markdown. */
+  coverInlineHtml?: string;
 }
 
 export interface RenderTemplateOptions {
@@ -270,11 +279,69 @@ hr { border: none; border-top: 1px solid #d8d8d8; margin: 1.2em 0; }
 `.trim();
 }
 
+function coverBodyHtml(
+  template: TemplateInput,
+  opts: RenderTemplateOptions,
+): string {
+  const pageW = template.page.orientation === 'landscape'
+    ? PAGE_SIZES_MM[template.page.format].height
+    : PAGE_SIZES_MM[template.page.format].width;
+  const pageH = template.page.orientation === 'landscape'
+    ? PAGE_SIZES_MM[template.page.format].width
+    : PAGE_SIZES_MM[template.page.format].height;
+
+  const inner = template.cover.elements.map((el) => {
+    const wrapperStyle = `position: absolute; ${positionInlineStyle(el as TemplateElement)};`;
+    return `<div style="${wrapperStyle}">${elementInnerHtml(el as TemplateElement, opts)}</div>`;
+  }).join('');
+
+  const style = [
+    'position: relative',
+    'box-sizing: border-box',
+    `width: ${pageW}mm`,
+    `height: ${pageH}mm`,
+    'overflow: hidden',
+  ].join('; ');
+  return `<div class="cover-page" style="${style}">${inner}</div>`;
+}
+
+function coverDocumentHtml(
+  template: TemplateInput,
+  opts: RenderTemplateOptions,
+): string {
+  return buildDocumentHtml({
+    css: buildCss(template),
+    bodyHtml: coverBodyHtml(template, opts),
+  });
+}
+
 export function renderTemplate(
   template: TemplateInput | Template,
   opts: RenderTemplateOptions = {},
 ): RenderedTemplate {
   const { page, header, footer } = template;
+
+  const cover = template.cover;
+  let coverExternal: RenderedTemplate['cover'] | undefined;
+  let coverInline: string | undefined;
+
+  if (cover.enabled) {
+    if (cover.applyHeaderFooter) {
+      coverInline = `${coverBodyHtml(template as TemplateInput, opts)}<div class="page-break"></div>`;
+    } else {
+      coverExternal = {
+        html: coverDocumentHtml(template as TemplateInput, opts),
+        pdfOptions: {
+          format: page.format,
+          landscape: page.orientation === 'landscape',
+          printBackground: true,
+          displayHeaderFooter: false,
+          margin: { top: '0mm', right: '0mm', bottom: '0mm', left: '0mm' },
+        },
+      };
+    }
+  }
+
   return {
     headerHtml: bandHtml(header, template, opts),
     footerHtml: bandHtml(footer, template, opts),
@@ -291,6 +358,8 @@ export function renderTemplate(
         left: `${page.margins.left}mm`,
       },
     },
+    ...(coverExternal ? { cover: coverExternal } : {}),
+    ...(coverInline ? { coverInlineHtml: coverInline } : {}),
   };
 }
 

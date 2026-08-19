@@ -314,3 +314,50 @@ describe('buildDocumentHtml', () => {
     expect(html).toContain(css);
   });
 });
+
+describe('renderTemplate — cover', () => {
+  it('não emite cover quando desabilitada', () => {
+    const t = makeBlankTemplateInput();
+    const r = renderTemplate(t);
+    expect(r.cover).toBeUndefined();
+    expect(r.coverInlineHtml).toBeUndefined();
+  });
+
+  it('emite cover como documento separado quando applyHeaderFooter=false', () => {
+    const t = makeBlankTemplateInput() as any;
+    t.cover = {
+      enabled: true, applyHeaderFooter: false,
+      elements: [{ type: 'text', value: 'Título', align: 'center', xOffsetMm: 0, yMm: 130, fontSizePt: 28, bold: true, color: '#000' }],
+    };
+    const r = renderTemplate(t);
+    expect(r.cover).toBeDefined();
+    expect(r.cover!.html).toContain('Título');
+    expect(r.cover!.html.trim().startsWith('<!doctype html>')).toBe(true);
+    expect(r.cover!.pdfOptions.displayHeaderFooter).toBe(false);
+    expect(r.cover!.pdfOptions.margin).toEqual({ top: '0mm', right: '0mm', bottom: '0mm', left: '0mm' });
+    expect(r.coverInlineHtml).toBeUndefined();
+  });
+
+  it('emite coverInlineHtml quando applyHeaderFooter=true', () => {
+    const t = makeBlankTemplateInput() as any;
+    t.cover = {
+      enabled: true, applyHeaderFooter: true,
+      elements: [{ type: 'text', value: 'Título', align: 'center', xOffsetMm: 0, yMm: 100, fontSizePt: 24, bold: true, color: '#000' }],
+    };
+    const r = renderTemplate(t);
+    expect(r.cover).toBeUndefined();
+    expect(r.coverInlineHtml).toBeDefined();
+    expect(r.coverInlineHtml).toContain('Título');
+    expect(r.coverInlineHtml).toContain('page-break');
+  });
+
+  it('resolve variáveis nos textos da capa', () => {
+    const t = makeBlankTemplateInput() as any;
+    t.cover = {
+      enabled: true, applyHeaderFooter: false,
+      elements: [{ type: 'text', value: 'Contrato {{numero}}', align: 'center', xOffsetMm: 0, yMm: 100, fontSizePt: 22, bold: true, color: '#000' }],
+    };
+    const r = renderTemplate(t, { variables: { numero: '2026/0413' } });
+    expect(r.cover!.html).toContain('Contrato 2026/0413');
+  });
+});
