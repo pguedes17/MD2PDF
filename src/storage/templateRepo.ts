@@ -7,6 +7,7 @@ import {
   type TemplateInput,
   type TemplateSummary,
 } from '../domain/template.js';
+import { migrateTemplateJson } from '../domain/templateMigration.js';
 import { assertSafeId, readJsonIfExists, removeIfExists, writeFileAtomic } from './fsUtil.js';
 
 export interface TemplateRepo {
@@ -30,6 +31,19 @@ export function createTemplateRepo(dir: string): TemplateRepo {
     return validated;
   }
 
+  /** Lê, migra (se preciso), valida, e grava de volta se a migração alterou algo —
+   *  o disco converge para o formato novo na primeira leitura. */
+  async function readAndMigrate(file: string): Promise<Template | null> {
+    const raw = await readJsonIfExists<unknown>(file);
+    if (raw === null) return null;
+    const { data, changed } = migrateTemplateJson(raw);
+    const validated = TemplateSchema.parse(data);
+    if (changed) {
+      await writeFileAtomic(file, JSON.stringify(validated, null, 2));
+    }
+    return validated;
+  }
+
   return {
     async create(input) {
       const now = new Date().toISOString();
@@ -37,9 +51,7 @@ export function createTemplateRepo(dir: string): TemplateRepo {
     },
 
     async get(id) {
-      const raw = await readJsonIfExists<unknown>(fileOf(id));
-      if (raw === null) return null;
-      return TemplateSchema.parse(raw);
+      return readAndMigrate(fileOf(id));
     },
 
     async list() {
@@ -57,10 +69,9 @@ export function createTemplateRepo(dir: string): TemplateRepo {
         // Um arquivo corrompido (JSON inválido ou fora do schema) não deve
         // impedir de listar os demais.
         try {
-          const raw = await readJsonIfExists<unknown>(path.join(dir, entry));
-          const parsed = TemplateSchema.safeParse(raw);
-          if (!parsed.success) continue;
-          const { id, name, createdAt, updatedAt } = parsed.data;
+          const template = await readAndMigrate(path.join(dir, entry));
+          if (!template) continue;
+          const { id, name, createdAt, updatedAt } = template;
           summaries.push({ id, name, createdAt, updatedAt });
         } catch {
           continue;

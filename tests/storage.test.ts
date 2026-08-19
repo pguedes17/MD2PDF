@@ -86,6 +86,46 @@ describe('templateRepo', () => {
     const list = await repo.list();
     expect(list.map((t) => t.id)).toEqual([ok.id]);
   });
+
+  it('migra JSON legado no formato de zones para elements na leitura', async () => {
+    const legacyId = 'tpl_legacy00000';
+    const legacyPath = path.join(dir, `${legacyId}.json`);
+    const legacyJson = JSON.stringify({
+      id: legacyId,
+      version: 1,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      name: 'Legado',
+      page: { format: 'A4', orientation: 'portrait', margins: { top: 30, right: 20, bottom: 25, left: 20 } },
+      header: {
+        heightMm: 20,
+        zones: {
+          left: [],
+          center: [],
+          right: [{ type: 'text', value: 'legado', bold: false, fontSizePt: 9, color: '#444' }],
+        },
+      },
+      footer: { heightMm: 0, zones: { left: [], center: [], right: [] } },
+      body: {
+        fontFamily: 'system-ui',
+        fontSizePt: 11,
+        color: '#111111',
+        lineHeight: 1.5,
+      },
+    });
+    await fs.writeFile(legacyPath, legacyJson, 'utf8');
+
+    const repo = createTemplateRepo(dir);
+    const loaded = await repo.get(legacyId);
+    expect(loaded).not.toBeNull();
+    expect(loaded!.header.elements).toHaveLength(1);
+    expect(loaded!.header.elements[0]).toMatchObject({ type: 'text', align: 'right' });
+
+    // self-healing: o arquivo em disco foi reescrito no formato novo
+    const disk = JSON.parse(await fs.readFile(legacyPath, 'utf8'));
+    expect(disk.header.zones).toBeUndefined();
+    expect(disk.header.elements).toHaveLength(1);
+  });
 });
 
 describe('assetRepo', () => {
