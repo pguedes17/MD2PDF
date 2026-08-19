@@ -6,6 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app.js';
 import { createTemplateRepo } from '../src/storage/templateRepo.js';
 import { createAssetRepo } from '../src/storage/assetRepo.js';
+import { createFontRepo } from '../src/storage/fontRepo.js';
 import { createOutputStore } from '../src/storage/outputStore.js';
 import { createPdfService } from '../src/render/pdf.js';
 import { makeBlankTemplateInput } from '../src/domain/template.js';
@@ -32,11 +33,30 @@ function multipart(field: string, filename: string, contentType: string, data: B
   };
 }
 
+/** Multipart com campos de texto ANTES do arquivo (ordem importa em alguns parsers). */
+function multipartWithField(
+  fileField: string, filename: string, contentType: string, data: Buffer,
+  textFields: Record<string, string>,
+) {
+  const boundary = '----md2pdftest';
+  const parts: Buffer[] = [];
+  for (const [k, v] of Object.entries(textFields)) {
+    parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`));
+  }
+  parts.push(Buffer.from(
+    `--${boundary}\r\nContent-Disposition: form-data; name="${fileField}"; filename="${filename}"\r\nContent-Type: ${contentType}\r\n\r\n`,
+  ));
+  parts.push(data);
+  parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+  return { payload: Buffer.concat(parts), headers: { 'content-type': `multipart/form-data; boundary=${boundary}` } };
+}
+
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), 'md2pdf-api-'));
   app = buildApp({
     templateRepo: createTemplateRepo(path.join(dir, 'templates')),
     assetRepo: createAssetRepo(path.join(dir, 'assets')),
+    fontRepo: createFontRepo(path.join(dir, 'fonts')),
     outputStore: createOutputStore(path.join(dir, 'outputs')),
     pdfService: createPdfService(),
     logger: false,
@@ -402,5 +422,33 @@ describe('POST /api/convert', () => {
     });
     expect(res.statusCode).toBe(422);
     expect(res.json().error).toBe('asset_not_found');
+  });
+});
+
+describe('/api/fonts', () => {
+  it('POST + GET fluxo básico', async () => {
+    const ttf = Buffer.alloc(64, 0);
+    const mp = multipartWithField('file', 'MinhaFonte.ttf', 'font/ttf', ttf, { family: 'MinhaFonte, sans-serif' });
+    const create = await app.inject({ method: 'POST', url: '/api/fonts', payload: mp.payload, headers: mp.headers });
+    expect(create.statusCode).toBe(201);
+    const created = create.json();
+    expect(created.fontId).toMatch(/^fnt_/);
+
+    const list = await app.inject({ method: 'GET', url: '/api/fonts' });
+    expect(list.statusCode).toBe(200);
+    expect(list.json().find((f: any) => f.fontId === created.fontId)).toBeDefined();
+
+    const data = await app.inject({ method: 'GET', url: `/api/fonts/${created.fontId}/data-uri` });
+    expect(data.statusCode).toBe(200);
+    expect(data.json().dataUri.startsWith('data:font/ttf;base64,')).toBe(true);
+
+    const del = await app.inject({ method: 'DELETE', url: `/api/fonts/${created.fontId}` });
+    expect(del.statusCode).toBe(204);
+  });
+
+  it('POST recusa tipo inválido', async () => {
+    const mp = multipartWithField('file', 'x.exe', 'application/octet-stream', Buffer.from('lixo'), { family: 'X' });
+    const res = await app.inject({ method: 'POST', url: '/api/fonts', payload: mp.payload, headers: mp.headers });
+    expect(res.statusCode).toBe(400);
   });
 });

@@ -9,6 +9,7 @@ export const config = {
     root,
     templates: path.join(root, 'templates'),
     assets: path.join(root, 'assets'),
+    fonts: path.join(root, 'fonts'),
     /** Onde ficam os PDFs gerados no modo `output: "path"`. */
     outputs: process.env.MD2PDF_OUTPUT_DIR ?? path.join(root, 'outputs'),
   },
@@ -17,6 +18,7 @@ export const config = {
   /** Teto por conversão. Markdown patológico não pode segurar um worker para sempre. */
   conversionTimeoutMs: Number(process.env.CONVERSION_TIMEOUT_MS ?? 30_000),
   maxAssetBytes: 5 * 1024 * 1024,
+  maxFontBytes: 2 * 1024 * 1024,
   /** TTL dos PDFs gravados em `storage.outputs`. `0` desliga a limpeza. */
   outputTtlMs: Number(process.env.MD2PDF_OUTPUT_TTL_MS ?? 24 * 60 * 60 * 1000),
   /** Frequência da varredura de limpeza. `0` desliga a limpeza. */

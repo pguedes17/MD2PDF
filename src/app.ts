@@ -10,10 +10,13 @@ import type { OutputStore } from './storage/outputStore.js';
 import { templateRoutes } from './routes/templates.js';
 import { assetRoutes } from './routes/assets.js';
 import { convertRoutes } from './routes/convert.js';
+import { fontRoutes } from './routes/fonts.js';
+import type { FontRepo } from './storage/fontRepo.js';
 
 export interface AppDeps {
   templateRepo: TemplateRepo;
   assetRepo: AssetRepo;
+  fontRepo: FontRepo;
   conversionService: ConversionService;
   outputStore: OutputStore;
 }
@@ -21,6 +24,7 @@ export interface AppDeps {
 export interface BuildAppOptions {
   templateRepo: TemplateRepo;
   assetRepo: AssetRepo;
+  fontRepo: FontRepo;
   pdfService: PdfService;
   outputStore: OutputStore;
   logger?: boolean;
@@ -42,6 +46,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   const deps: AppDeps = {
     templateRepo: options.templateRepo,
     assetRepo: options.assetRepo,
+    fontRepo: options.fontRepo,
     outputStore: options.outputStore,
     conversionService: createConversionService({
       templateRepo: options.templateRepo,
@@ -57,6 +62,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   app.register(async (instance) => templateRoutes(instance, deps));
   app.register(async (instance) => assetRoutes(instance, deps));
   app.register(async (instance) => convertRoutes(instance, deps));
+  app.register(async (instance) => fontRoutes(instance, deps));
 
   app.setErrorHandler((error: HttpishError, request, reply) => {
     const statusCode = error.statusCode ?? 500;

@@ -5,6 +5,7 @@ import { buildApp } from './app.js';
 import { config } from './config.js';
 import { createTemplateRepo } from './storage/templateRepo.js';
 import { createAssetRepo } from './storage/assetRepo.js';
+import { createFontRepo } from './storage/fontRepo.js';
 import { createOutputStore } from './storage/outputStore.js';
 import { createPdfService } from './render/pdf.js';
 
@@ -40,6 +41,7 @@ const outputStore = createOutputStore(config.storage.outputs);
 const app = buildApp({
   templateRepo: createTemplateRepo(config.storage.templates),
   assetRepo: createAssetRepo(config.storage.assets),
+  fontRepo: createFontRepo(config.storage.fonts),
   pdfService,
   outputStore,
 });
