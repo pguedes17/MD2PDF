@@ -274,9 +274,11 @@ export function Inspector({ template, selection, onChange, onSelect }: Inspector
       )}
 
       <div className="addmenu">
+        <span className="label addmenu__title">adicionar</span>
         {ELEMENT_TYPES.map((type) => (
           <button key={type} type="button" className="btn btn--sm btn--ghost" onClick={() => addElement(type)}>
-            + {ELEMENT_LABEL[type]}
+            <span className="addmenu__plus">+</span>
+            {ELEMENT_LABEL[type]}
           </button>
         ))}
       </div>
