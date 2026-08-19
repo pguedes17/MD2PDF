@@ -1,9 +1,26 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { TemplateInputSchema } from '../domain/template.js';
+import {
+  buildTemplateBundle,
+  importTemplateBundle,
+  TemplateBundleSchema,
+} from '../domain/templateBundle.js';
 import { TemplateNotFoundError } from '../conversion.js';
 import type { AppDeps } from '../app.js';
 import { parseOrThrow } from './validation.js';
+
+/** Nome do arquivo do bundle a partir do nome do template — só ASCII e - */
+function bundleFilename(name: string): string {
+  const slug = name
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase()
+    .slice(0, 40);
+  return `${slug || 'template'}.md2pdf.json`;
+}
 
 const PreviewBody = z.object({ markdown: z.string().optional() }).optional();
 
@@ -42,6 +59,28 @@ export async function templateRoutes(app: FastifyInstance, deps: AppDeps): Promi
   app.post('/api/templates', async (request, reply) => {
     const input = parseOrThrow(TemplateInputSchema, request.body);
     return reply.code(201).send(await deps.templateRepo.create(input));
+  });
+
+  // Importação de bundle portátil (template + assets). Vem antes de :id nos
+  // paths porque a rota é específica; o radix do Fastify já resolve isso mas
+  // deixo agrupada para leitura.
+  app.post('/api/templates/import', async (request, reply) => {
+    const bundle = parseOrThrow(TemplateBundleSchema, request.body);
+    const created = await importTemplateBundle(bundle, {
+      assetRepo: deps.assetRepo,
+      templateRepo: deps.templateRepo,
+    });
+    return reply.code(201).send(created);
+  });
+
+  app.get<{ Params: { id: string } }>('/api/templates/:id/export', async (request, reply) => {
+    const template = await deps.templateRepo.get(request.params.id);
+    if (!template) throw new TemplateNotFoundError(request.params.id);
+    const bundle = await buildTemplateBundle(template, deps.assetRepo);
+    return reply
+      .type('application/json')
+      .header('content-disposition', `attachment; filename="${bundleFilename(template.name)}"`)
+      .send(bundle);
   });
 
   app.put<{ Params: { id: string } }>('/api/templates/:id', async (request, reply) => {

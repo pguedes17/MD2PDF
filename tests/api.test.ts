@@ -118,6 +118,78 @@ describe('/api/templates', () => {
     expect(res.headers['content-type']).toBe('application/pdf');
     expect(res.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
   });
+
+  it('exporta como bundle JSON auto-contido', async () => {
+    const upload = await app.inject({
+      method: 'POST',
+      url: '/api/assets',
+      ...multipart('file', 'logo.png', 'image/png', PNG),
+    });
+    const { assetId } = upload.json();
+
+    const created = await createTemplate({
+      name: 'Exportável',
+      header: {
+        heightMm: 20,
+        elements: [
+          { type: 'image', assetId, heightMm: 10, align: 'left', xOffsetMm: 0, yMm: 0 },
+        ],
+      },
+    });
+
+    const res = await app.inject({ method: 'GET', url: `/api/templates/${created.id}/export` });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toMatch(/application\/json/);
+    expect(res.headers['content-disposition']).toContain('attachment');
+    const bundle = res.json();
+    expect(bundle.template.name).toBe('Exportável');
+    expect(bundle.template.id).toBeUndefined();
+    expect(bundle.assets).toHaveLength(1);
+    expect(bundle.assets[0].assetId).toBe(assetId);
+    expect(Buffer.from(bundle.assets[0].dataBase64, 'base64').equals(PNG)).toBe(true);
+  });
+
+  it('importa um bundle e cria template com id novo + assets novos', async () => {
+    const bundle = {
+      template: {
+        ...makeBlankTemplateInput('Importado'),
+        header: {
+          heightMm: 20,
+          elements: [
+            { type: 'image', assetId: 'ast_old', heightMm: 10, align: 'left', xOffsetMm: 0, yMm: 0 },
+          ],
+        },
+      },
+      assets: [
+        { assetId: 'ast_old', mime: 'image/png', originalName: 'l.png', dataBase64: PNG.toString('base64') },
+      ],
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/templates/import',
+      payload: bundle,
+    });
+    expect(res.statusCode, res.body).toBe(201);
+    const created = res.json();
+    expect(created.id).toMatch(/^tpl_/);
+    expect(created.header.elements[0].assetId).toMatch(/^ast_/);
+    expect(created.header.elements[0].assetId).not.toBe('ast_old');
+
+    // template importado aparece na listagem
+    const list = await app.inject({ method: 'GET', url: '/api/templates' });
+    expect(list.json().some((t: { id: string }) => t.id === created.id)).toBe(true);
+  });
+
+  it('recusa bundle inválido com 400 + issues', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/templates/import',
+      payload: { template: { name: '' }, assets: [] },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('validation_failed');
+  });
 });
 
 describe('/api/assets', () => {
