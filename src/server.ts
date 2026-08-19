@@ -5,6 +5,7 @@ import { buildApp } from './app.js';
 import { config } from './config.js';
 import { createTemplateRepo } from './storage/templateRepo.js';
 import { createAssetRepo } from './storage/assetRepo.js';
+import { createOutputStore } from './storage/outputStore.js';
 import { createPdfService } from './render/pdf.js';
 
 /** Página servida quando a API está de pé mas o editor ainda não foi compilado. */
@@ -34,12 +35,38 @@ const EDITOR_NAO_COMPILADO = `<!doctype html>
 </main></body></html>`;
 
 const pdfService = createPdfService();
+const outputStore = createOutputStore(config.storage.outputs);
 
 const app = buildApp({
   templateRepo: createTemplateRepo(config.storage.templates),
   assetRepo: createAssetRepo(config.storage.assets),
   pdfService,
+  outputStore,
 });
+
+/** Varre o dir de outputs periodicamente removendo PDFs com mtime além do TTL.
+ *  Um sweep inicial acontece na subida, então reinícios já limpam sobras. */
+function startOutputCleanup(): (() => void) | null {
+  const { outputTtlMs, outputCleanupIntervalMs } = config;
+  if (outputTtlMs <= 0 || outputCleanupIntervalMs <= 0) {
+    app.log.info('outputs: limpeza automática desligada');
+    return null;
+  }
+  const sweep = async () => {
+    try {
+      const { deleted, scanned } = await outputStore.cleanupOlderThan(outputTtlMs);
+      if (deleted > 0) app.log.info({ deleted, scanned }, 'outputs: limpeza removeu arquivos');
+    } catch (err) {
+      app.log.warn({ err }, 'outputs: falha na limpeza');
+    }
+  };
+  void sweep();
+  const handle = setInterval(() => void sweep(), outputCleanupIntervalMs);
+  handle.unref?.();
+  return () => clearInterval(handle);
+}
+
+const stopCleanup = startOutputCleanup();
 
 // Em produção o mesmo processo serve o editor já compilado; em dev o Vite cuida
 // disso na porta 5173.
@@ -66,6 +93,7 @@ app.setNotFoundHandler((request, reply) => {
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => {
     app.log.info('encerrando...');
+    stopCleanup?.();
     void app.close().then(() => process.exit(0));
   });
 }

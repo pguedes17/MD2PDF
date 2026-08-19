@@ -6,6 +6,7 @@ import { MissingAssetError } from './render/template.js';
 import type { PdfService } from './render/pdf.js';
 import type { TemplateRepo } from './storage/templateRepo.js';
 import type { AssetRepo } from './storage/assetRepo.js';
+import type { OutputStore } from './storage/outputStore.js';
 import { templateRoutes } from './routes/templates.js';
 import { assetRoutes } from './routes/assets.js';
 import { convertRoutes } from './routes/convert.js';
@@ -14,12 +15,14 @@ export interface AppDeps {
   templateRepo: TemplateRepo;
   assetRepo: AssetRepo;
   conversionService: ConversionService;
+  outputStore: OutputStore;
 }
 
 export interface BuildAppOptions {
   templateRepo: TemplateRepo;
   assetRepo: AssetRepo;
   pdfService: PdfService;
+  outputStore: OutputStore;
   logger?: boolean;
 }
 
@@ -39,6 +42,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   const deps: AppDeps = {
     templateRepo: options.templateRepo,
     assetRepo: options.assetRepo,
+    outputStore: options.outputStore,
     conversionService: createConversionService({
       templateRepo: options.templateRepo,
       assetRepo: options.assetRepo,

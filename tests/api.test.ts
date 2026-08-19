@@ -6,6 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app.js';
 import { createTemplateRepo } from '../src/storage/templateRepo.js';
 import { createAssetRepo } from '../src/storage/assetRepo.js';
+import { createOutputStore } from '../src/storage/outputStore.js';
 import { createPdfService } from '../src/render/pdf.js';
 import { makeBlankTemplateInput } from '../src/domain/template.js';
 import { readPdf } from './helpers/readPdf.js';
@@ -36,6 +37,7 @@ beforeAll(async () => {
   app = buildApp({
     templateRepo: createTemplateRepo(path.join(dir, 'templates')),
     assetRepo: createAssetRepo(path.join(dir, 'assets')),
+    outputStore: createOutputStore(path.join(dir, 'outputs')),
     pdfService: createPdfService(),
     logger: false,
   });
@@ -117,6 +119,38 @@ describe('/api/templates', () => {
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toBe('application/pdf');
     expect(res.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
+  });
+
+  it('duplica um template com novo id, timestamps e nome "(cópia)"', async () => {
+    const original = await createTemplate({ name: 'Original' });
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/templates/${original.id}/duplicate`,
+    });
+    expect(res.statusCode, res.body).toBe(201);
+    const copy = res.json();
+    expect(copy.id).toMatch(/^tpl_/);
+    expect(copy.id).not.toBe(original.id);
+    expect(copy.name).toBe('Original (cópia)');
+    expect(copy.page).toEqual(original.page);
+    expect(copy.header).toEqual(original.header);
+    expect(copy.footer).toEqual(original.footer);
+    // Timestamps novos — não copia dos do original.
+    expect(copy.createdAt >= original.createdAt).toBe(true);
+
+    // Ambos aparecem na listagem.
+    const list = await app.inject({ method: 'GET', url: '/api/templates' });
+    const ids = list.json().map((t: { id: string }) => t.id);
+    expect(ids).toContain(original.id);
+    expect(ids).toContain(copy.id);
+  });
+
+  it('duplicate devolve 404 quando template não existe', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/templates/tpl_naoexiste/duplicate',
+    });
+    expect(res.statusCode).toBe(404);
   });
 
   it('exporta como bundle JSON auto-contido', async () => {
@@ -323,6 +357,32 @@ describe('POST /api/convert', () => {
       payload: { markdown: '   ', templateId },
     });
     expect(res.statusCode).toBe(400);
+  });
+
+  it('grava em disco quando `output: "path"` e devolve o caminho absoluto', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/convert',
+      payload: {
+        markdown: '# Doc\n\nCorpo.',
+        templateId,
+        output: 'path',
+        filename: 'contrato.pdf',
+      },
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json();
+    expect(body.templateId).toBe(templateId);
+    expect(body.pages).toBeGreaterThanOrEqual(1);
+    expect(body.bytes).toBeGreaterThan(0);
+    expect(body.filename).toMatch(/^contrato-\d{8}T\d{6}-[0-9a-f]{6}\.pdf$/);
+    expect(path.isAbsolute(body.path)).toBe(true);
+    // O arquivo existe e é um PDF de verdade.
+    const buf = await fs.readFile(body.path);
+    expect(buf.subarray(0, 5).toString()).toBe('%PDF-');
+    expect(buf.byteLength).toBe(body.bytes);
+    // E fica dentro do outputs dir do server.
+    expect(path.dirname(body.path)).toBe(path.resolve(dir, 'outputs'));
   });
 
   it('422 quando o template aponta para um asset que sumiu', async () => {

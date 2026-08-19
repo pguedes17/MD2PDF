@@ -49,6 +49,31 @@ export const api = {
   deleteTemplate: (id: string) =>
     request<void>(`/api/templates/${id}`, { method: 'DELETE' }),
 
+  duplicateTemplate: (id: string) =>
+    request<Template>(`/api/templates/${id}/duplicate`, { method: 'POST' }),
+
+  /** Gera o PDF final e devolve o Blob + o filename sugerido pelo servidor. */
+  async convertToPdf(input: {
+    templateId: string;
+    markdown: string;
+    variables?: Record<string, string>;
+    filename?: string;
+  }): Promise<{ blob: Blob; filename: string }> {
+    const response = await fetch('/api/convert', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new ApiError(response.status, body.message ?? response.statusText, body.issues);
+    }
+    const disposition = response.headers.get('content-disposition') ?? '';
+    const match = /filename="([^"]+)"/.exec(disposition);
+    const filename = match?.[1] ?? input.filename ?? 'documento.pdf';
+    return { blob: await response.blob(), filename };
+  },
+
   async uploadAsset(file: File): Promise<{ assetId: string; mime: string; bytes: number }> {
     const form = new FormData();
     form.append('file', file);

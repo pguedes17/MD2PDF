@@ -3,9 +3,11 @@ import { makeBlankTemplateInput, type Template } from '@shared/domain/template.j
 import { api, ApiError } from '../api.js';
 import { Brand, LogoMark } from '../components/Logo.js';
 import { SheetThumb } from '../components/SheetThumb.js';
+import { buildTemplateOpenApi } from '../lib/templateOpenApi.js';
 
 interface TemplateListProps {
   onOpen: (id: string) => void;
+  onConvert: (id: string) => void;
 }
 
 function formatDate(iso: string): string {
@@ -28,10 +30,11 @@ function facts(template: Template): string[] {
   return out;
 }
 
-export function TemplateList({ onOpen }: TemplateListProps) {
+export function TemplateList({ onOpen, onConvert }: TemplateListProps) {
   const [templates, setTemplates] = useState<Template[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [copiedOpenApi, setCopiedOpenApi] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [importing, setImporting] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -71,10 +74,27 @@ export function TemplateList({ onOpen }: TemplateListProps) {
     void reload();
   }
 
+  async function duplicate(template: Template) {
+    try {
+      const copy = await api.duplicateTemplate(template.id);
+      await reload();
+      onOpen(copy.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'não foi possível duplicar');
+    }
+  }
+
   async function copyId(id: string) {
     await navigator.clipboard.writeText(id);
     setCopied(id);
     setTimeout(() => setCopied(null), 1800);
+  }
+
+  async function copyOpenApi(template: Template) {
+    const doc = buildTemplateOpenApi(template, { serverUrl: window.location.origin });
+    await navigator.clipboard.writeText(JSON.stringify(doc, null, 2));
+    setCopiedOpenApi(template.id);
+    setTimeout(() => setCopiedOpenApi(null), 1800);
   }
 
   async function importBundle(file: File) {
@@ -209,34 +229,66 @@ export function TemplateList({ onOpen }: TemplateListProps) {
                   </div>
 
                   <div className="card__foot">
-                    <button
-                      type="button"
-                      className={`idchip ${copied === template.id ? 'idchip--copied' : ''}`}
-                      title="Copiar o id para usar na API"
-                      onClick={() => void copyId(template.id)}
-                    >
-                      {template.id}
-                      <span className="idchip__action">
-                        {copied === template.id ? 'copiado' : 'copiar'}
-                      </span>
-                    </button>
+                    <div className="card__foot-row">
+                      <button
+                        type="button"
+                        className={`idchip ${copied === template.id ? 'idchip--copied' : ''}`}
+                        title="Copiar o id para usar na API"
+                        onClick={() => void copyId(template.id)}
+                      >
+                        {template.id}
+                        <span className="idchip__action">
+                          {copied === template.id ? 'copiado' : 'copiar'}
+                        </span>
+                      </button>
 
-                    <span className="card__spacer" />
+                      <span className="card__spacer" />
 
-                    <button
-                      type="button"
-                      className="btn btn--sm btn--quiet"
-                      onClick={() => void remove(template)}
-                    >
-                      Excluir
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn--sm"
-                      onClick={() => onOpen(template.id)}
-                    >
-                      Abrir
-                    </button>
+                      <button
+                        type="button"
+                        className="btn btn--sm btn--ghost"
+                        title="Copia um OpenAPI 3.0.3 pronto para virar tool MCP"
+                        onClick={() => void copyOpenApi(template)}
+                      >
+                        {copiedOpenApi === template.id ? 'OpenAPI copiado' : 'Copiar OpenAPI'}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn--sm btn--ghost"
+                        title="Cria uma cópia deste template e a abre no editor"
+                        onClick={() => void duplicate(template)}
+                      >
+                        Duplicar
+                      </button>
+                    </div>
+
+                    <div className="card__foot-row card__foot-row--actions">
+                      <button
+                        type="button"
+                        className="btn btn--sm btn--quiet"
+                        onClick={() => void remove(template)}
+                      >
+                        Excluir
+                      </button>
+
+                      <span className="card__spacer" />
+
+                      <button
+                        type="button"
+                        className="btn btn--sm"
+                        onClick={() => onOpen(template.id)}
+                      >
+                        Abrir
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn--sm btn--accent"
+                        title="Cole um markdown, informe as variáveis e baixe o PDF"
+                        onClick={() => onConvert(template.id)}
+                      >
+                        Gerar PDF
+                      </button>
+                    </div>
                   </div>
                 </div>
               </article>

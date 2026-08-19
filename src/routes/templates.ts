@@ -73,6 +73,16 @@ export async function templateRoutes(app: FastifyInstance, deps: AppDeps): Promi
     return reply.code(201).send(created);
   });
 
+  app.post<{ Params: { id: string } }>('/api/templates/:id/duplicate', async (request, reply) => {
+    const source = await deps.templateRepo.get(request.params.id);
+    if (!source) throw new TemplateNotFoundError(request.params.id);
+    // Assets são imutáveis e endereçados por id — a cópia reusa os mesmos assetIds.
+    // Só o metadata do template (id, timestamps, nome) muda.
+    const { id: _srcId, version: _v, createdAt: _c, updatedAt: _u, ...input } = source;
+    const copy = await deps.templateRepo.create({ ...input, name: `${source.name} (cópia)` });
+    return reply.code(201).send(copy);
+  });
+
   app.get<{ Params: { id: string } }>('/api/templates/:id/export', async (request, reply) => {
     const template = await deps.templateRepo.get(request.params.id);
     if (!template) throw new TemplateNotFoundError(request.params.id);

@@ -170,6 +170,39 @@ const pdf = Buffer.from(await response.arrayBuffer());
 | `templateId` | sim | O id copiado do editor |
 | `variables` | não | Preenche os `{{placeholders}}` do cabeçalho e do rodapé |
 | `filename` | não | Nome sugerido no download. O padrão é o nome do template |
+| `output` | não | `binary` (default), `base64` ou `path` — veja abaixo |
+
+### Modo `output: "path"` (pensado para tools MCP)
+
+Devolve JSON com o **caminho absoluto** de um PDF já gravado em disco no host
+da API, evitando trafegar binário/base64:
+
+```bash
+curl -X POST http://localhost:3000/api/convert \
+  -H "content-type: application/json" \
+  -d '{ "templateId": "tpl_...", "markdown": "# Doc", "output": "path" }'
+```
+
+```json
+{
+  "path": "C:/.../storage/outputs/contrato-20260819T143012-a1b2c3.pdf",
+  "filename": "contrato-20260819T143012-a1b2c3.pdf",
+  "templateId": "tpl_...",
+  "pages": 1,
+  "bytes": 4123
+}
+```
+
+O arquivo cai em `MD2PDF_OUTPUT_DIR` (default `./storage/outputs`). O servidor
+roda um scheduler que apaga automaticamente os PDFs mais antigos que
+`MD2PDF_OUTPUT_TTL_MS` (default 24 h), varrendo a pasta a cada
+`MD2PDF_OUTPUT_CLEANUP_INTERVAL_MS` (default 1 h). Uma varredura extra roda na
+subida do servidor. Definir qualquer um desses valores como `0` desliga a
+limpeza automática.
+
+Os botões **"Copiar OpenAPI"** no editor e na lista de templates já geram um
+spec OpenAPI 3.0.3 com `output` fixado em `"path"`, pronto para virar tool
+MCP.
 
 ---
 
@@ -319,6 +352,9 @@ Tudo por variável de ambiente, nenhuma obrigatória:
 | `PORT` | `3000` | Porta da API |
 | `HOST` | `0.0.0.0` | Interface de escuta |
 | `MD2PDF_STORAGE` | `./storage` | Onde ficam templates e imagens |
+| `MD2PDF_OUTPUT_DIR` | `./storage/outputs` | PDFs gerados no modo `output: "path"` |
+| `MD2PDF_OUTPUT_TTL_MS` | `86400000` (24 h) | Idade máxima dos PDFs em `MD2PDF_OUTPUT_DIR`; `0` desliga a limpeza |
+| `MD2PDF_OUTPUT_CLEANUP_INTERVAL_MS` | `3600000` (1 h) | Frequência da varredura de limpeza; `0` desliga a limpeza |
 | `MAX_CONCURRENT` | `4` | Conversões simultâneas |
 | `CONVERSION_TIMEOUT_MS` | `30000` | Teto por conversão |
 

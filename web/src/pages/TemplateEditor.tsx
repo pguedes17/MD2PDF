@@ -196,6 +196,17 @@ export function TemplateEditor({ templateId, onBack }: TemplateEditorProps) {
           </button>
           <button
             type="button"
+            className="btn btn--sm btn--ghost"
+            disabled={dirty || blocked}
+            title={dirty ? 'Salve antes de gerar um PDF' : 'Abrir a tela de conversão'}
+            onClick={() => {
+              window.location.hash = `#/convert/${templateId}`;
+            }}
+          >
+            Gerar PDF
+          </button>
+          <button
+            type="button"
             className="btn btn--sm btn--accent"
             disabled={previewing || blocked}
             onClick={() => void preview()}
