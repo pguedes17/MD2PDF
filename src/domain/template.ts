@@ -22,13 +22,19 @@ const commonTextProps = {
   color: hexColor.default('#444'),
 };
 
-/** Posição do elemento dentro da faixa. `xOffsetMm` positivo sempre puxa para
- *  dentro da folha (para longe da borda de âncora em left/right, para a direita
- *  em center). `yMm` é a distância do topo da faixa. */
-const positionProps = {
+/** Posição do elemento dentro de uma faixa (header/footer). `xOffsetMm` positivo
+ *  sempre puxa para dentro da folha. `yMm` é a distância do topo da faixa (0..60). */
+const bandPositionProps = {
   align: z.enum(['left', 'center', 'right']).default('left'),
   xOffsetMm: z.number().min(-200).max(200).default(0),
   yMm: z.number().min(0).max(60).default(0),
+};
+
+/** Posição do elemento na capa. `yMm` pode ir até 320mm (maior formato suportado). */
+const coverPositionProps = {
+  align: z.enum(['left', 'center', 'right']).default('left'),
+  xOffsetMm: z.number().min(-200).max(200).default(0),
+  yMm: z.number().min(0).max(320).default(0),
 };
 
 export const ElementSchema = z.discriminatedUnion('type', [
@@ -37,29 +43,60 @@ export const ElementSchema = z.discriminatedUnion('type', [
     assetId: z.string().min(1, 'escolha uma imagem para este elemento'),
     /** Altura renderizada; a largura acompanha proporcionalmente. */
     heightMm: z.number().min(1).max(40).default(12),
-    ...positionProps,
+    ...bandPositionProps,
   }),
   z.object({
     type: z.literal('text'),
     /** Aceita placeholders {{variavel}}, resolvidos na conversão. */
     value: z.string().default(''),
     ...commonTextProps,
-    ...positionProps,
+    ...bandPositionProps,
   }),
   z.object({
     type: z.literal('pageNumber'),
     /** {page} e {total} são substituídos pelo próprio Chromium. */
     format: z.string().default('{page} / {total}'),
     ...commonTextProps,
-    ...positionProps,
+    ...bandPositionProps,
   }),
   z.object({
     type: z.literal('date'),
     format: z.enum(['dd/MM/yyyy', 'yyyy-MM-dd', 'dd/MM/yyyy HH:mm']).default('dd/MM/yyyy'),
     ...commonTextProps,
-    ...positionProps,
+    ...bandPositionProps,
   }),
 ]);
+
+/** Elementos válidos na capa — sem pageNumber (não faz sentido numa capa). */
+export const CoverElementSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('image'),
+    assetId: z.string().min(1, 'escolha uma imagem para este elemento'),
+    heightMm: z.number().min(1).max(200).default(30),
+    ...coverPositionProps,
+  }),
+  z.object({
+    type: z.literal('text'),
+    value: z.string().default(''),
+    ...commonTextProps,
+    ...coverPositionProps,
+  }),
+  z.object({
+    type: z.literal('date'),
+    format: z.enum(['dd/MM/yyyy', 'yyyy-MM-dd', 'dd/MM/yyyy HH:mm']).default('dd/MM/yyyy'),
+    ...commonTextProps,
+    ...coverPositionProps,
+  }),
+]);
+
+export const CoverSchema = z.object({
+  enabled: z.boolean().default(false),
+  applyHeaderFooter: z.boolean().default(false),
+  elements: z.array(CoverElementSchema).default([]),
+});
+
+export type TemplateCoverElement = z.infer<typeof CoverElementSchema>;
+export type TemplateCover = z.infer<typeof CoverSchema>;
 
 export const BandSchema = z.object({
   heightMm: z.number().min(0).max(60),
@@ -118,6 +155,7 @@ const baseTemplateShape = {
   // prefault (não default): o Zod 4 não aplica defaults internos ao valor de .default()
   body: BodySchema.prefault({}),
   headings: HeadingsSchema.prefault({}),
+  cover: CoverSchema.prefault({}),
 };
 
 const TemplateInputBase = z.object(baseTemplateShape);
@@ -165,12 +203,41 @@ function checkElementsFit(
   });
 }
 
+function estimatedCoverElementHeightMm(el: TemplateCoverElement): number {
+  if (el.type === 'image') return el.heightMm;
+  return el.fontSizePt * 0.353 * 1.2;
+}
+
+function pageHeightMm(t: TemplateBase): number {
+  const size = PAGE_SIZES_MM[t.page.format];
+  return t.page.orientation === 'landscape' ? size.width : size.height;
+}
+
+function checkCoverFits(t: TemplateBase, ctx: z.RefinementCtx): void {
+  if (!t.cover.enabled) return;
+  const pageH = pageHeightMm(t);
+  const availableH = t.cover.applyHeaderFooter
+    ? pageH - t.page.margins.top - t.page.margins.bottom
+    : pageH;
+  t.cover.elements.forEach((el, i) => {
+    const h = estimatedCoverElementHeightMm(el);
+    if (el.yMm + h > availableH + 0.001) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['cover', 'elements', i, 'yMm'],
+        message: `elemento não cabe na página: yMm (${el.yMm}) + altura (${h.toFixed(1)}) excede ${availableH}mm`,
+      });
+    }
+  });
+}
+
 /** Aceita o tipo base, então serve tanto ao schema de entrada quanto ao persistido. */
 function checkBands(t: TemplateBase, ctx: z.RefinementCtx): void {
   checkBandFits(t.header.heightMm, t.page.margins.top, 'top', ctx);
   checkBandFits(t.footer.heightMm, t.page.margins.bottom, 'bottom', ctx);
   checkElementsFit(t.header, 'header', ctx);
   checkElementsFit(t.footer, 'footer', ctx);
+  checkCoverFits(t, ctx);
 }
 
 /** O que a API aceita em POST/PUT: sem id nem timestamps (o servidor os define). */
