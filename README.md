@@ -54,8 +54,8 @@ Se precisar instalar ou trocar de versão, use o [nvm](https://github.com/nvm-sh
 ## Instalação
 
 ```bash
-git clone https://github.com/pguedes17/MD2PDF.git
-cd MD2PDF
+git clone https://github.com/pguedes17/md2pdf.git
+cd md2pdf
 
 npm install   # dependências da API e do editor + baixa o Chromium
 ```
