@@ -4,6 +4,7 @@ import {
   TemplateSchema,
   makeBlankTemplateInput,
   applyVariables,
+  HeadingsSchema,
 } from '../src/domain/template.js';
 
 const validInput = () => ({
@@ -149,6 +150,25 @@ describe('makeBlankTemplateInput', () => {
       xOffsetMm: 0,
       yMm: 0,
     });
+  });
+});
+
+describe('HeadingsSchema', () => {
+  it('aplica defaults por nível quando o objeto vem vazio', () => {
+    const parsed = HeadingsSchema.parse({});
+    expect(parsed.h1).toEqual({ color: '#111111', bold: true, fontSizePt: 20 });
+    expect(parsed.h2).toEqual({ color: '#111111', bold: true, fontSizePt: 16 });
+    expect(parsed.h3).toEqual({ color: '#111111', bold: true, fontSizePt: 13 });
+  });
+
+  it('rejeita cor sem #', () => {
+    const res = HeadingsSchema.safeParse({ h1: { color: 'ff0000', bold: true, fontSizePt: 20 } });
+    expect(res.success).toBe(false);
+  });
+
+  it('template em branco já vem com headings default', () => {
+    const t = makeBlankTemplateInput();
+    expect(t.headings.h1.fontSizePt).toBe(20);
   });
 });
 

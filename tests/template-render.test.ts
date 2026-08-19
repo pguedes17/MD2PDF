@@ -291,6 +291,19 @@ describe('renderTemplate — css', () => {
   });
 });
 
+describe('renderTemplate — headings css', () => {
+  it('emite regras CSS por nível de heading configurado', () => {
+    const t = makeBlankTemplateInput();
+    t.headings.h1 = { color: '#ff0000', bold: false, fontSizePt: 22 };
+    t.headings.h2 = { color: '#0000ff', bold: true, fontSizePt: 15 };
+    const { css } = renderTemplate(t);
+    expect(css).toContain('h1 { color: #ff0000; font-weight: 400; font-size: 22pt; }');
+    expect(css).toContain('h2 { color: #0000ff; font-weight: 700; font-size: 15pt; }');
+    // h3-h6 compartilham a regra do h3:
+    expect(css).toMatch(/h3, h4, h5, h6 \{ color: #111111; font-weight: 700; font-size: 13pt; \}/);
+  });
+});
+
 describe('buildDocumentHtml', () => {
   it('monta um documento completo com o css e o corpo', () => {
     const { css } = renderTemplate(templateWith());

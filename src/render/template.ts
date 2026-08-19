@@ -3,6 +3,7 @@ import {
   type Template,
   type TemplateBand,
   type TemplateElement,
+  type TemplateHeadings,
   type TemplateInput,
 } from '../domain/template.js';
 
@@ -213,6 +214,12 @@ function bandIsEmpty(band: TemplateBand): boolean {
 function buildCss(template: TemplateInput): string {
   const { body } = template;
   const codeSizePt = Math.max(7, body.fontSizePt - 2);
+  const { headings } = template;
+  const headingRule = (h: TemplateHeadings['h1']) =>
+    `color: ${h.color}; font-weight: ${h.bold ? 700 : 400}; font-size: ${h.fontSizePt}pt;`;
+  const h1Rule = `h1 { ${headingRule(headings.h1)} }`;
+  const h2Rule = `h2 { ${headingRule(headings.h2)} }`;
+  const h3Rule = `h3, h4, h5, h6 { ${headingRule(headings.h3)} }`;
   return `
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
@@ -231,6 +238,10 @@ body {
 /* Título não fica órfão no pé da página. */
 h1, h2, h3, h4, h5, h6 { break-after: avoid; margin: 1.2em 0 0.5em; line-height: 1.25; }
 h1:first-child, h2:first-child { margin-top: 0; }
+
+${h1Rule}
+${h2Rule}
+${h3Rule}
 
 /* Não parte no meio o que cabe inteiro na página seguinte. */
 table, img, pre, blockquote, figure { break-inside: avoid; }

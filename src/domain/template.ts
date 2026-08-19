@@ -90,6 +90,20 @@ const BodySchema = z.object({
   lineHeight: z.number().min(1).max(3).default(1.5),
 });
 
+export const HeadingStyleSchema = z.object({
+  color: hexColor,
+  bold: z.boolean(),
+  fontSizePt: fontSizePt,
+});
+
+export const HeadingsSchema = z.object({
+  h1: HeadingStyleSchema.prefault({ color: '#111111', bold: true, fontSizePt: 20 }),
+  h2: HeadingStyleSchema.prefault({ color: '#111111', bold: true, fontSizePt: 16 }),
+  h3: HeadingStyleSchema.prefault({ color: '#111111', bold: true, fontSizePt: 13 }),
+});
+
+export type TemplateHeadings = z.infer<typeof HeadingsSchema>;
+
 const baseTemplateShape = {
   name: z.string().trim().min(1, 'nome é obrigatório').max(120),
   page: PageSchema,
@@ -97,6 +111,7 @@ const baseTemplateShape = {
   footer: BandSchema,
   // prefault (não default): o Zod 4 não aplica defaults internos ao valor de .default()
   body: BodySchema.prefault({}),
+  headings: HeadingsSchema.prefault({}),
 };
 
 const TemplateInputBase = z.object(baseTemplateShape);
