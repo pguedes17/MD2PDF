@@ -15,7 +15,7 @@
     "test:watch": "vitest",
     "dev:web": "npm --prefix web run dev",
     "build:web": "npm --prefix web run build",
-    "setup:web": "npm install --prefix web --no-audit --no-fund",
+    "setup:web": "cd web && npm install --no-audit --no-fund",
     "postinstall": "playwright install chromium && npm run setup:web"
   },
   "dependencies": {
