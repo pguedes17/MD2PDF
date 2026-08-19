@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { TemplateElement, TemplateInput } from '@shared/domain/template.js';
 import { api, assetUrl } from '../api.js';
 import {
@@ -6,22 +6,88 @@ import {
   describeElement,
   ELEMENT_LABEL,
   makeElement,
+  NUDGE_FINE_MM,
+  NUDGE_MM,
   replaceElement,
-  updateZone,
-  ZONE_LABEL,
+  updateBand,
   type Selection,
 } from '../lib/templateModel.js';
 
 interface InspectorProps {
   template: TemplateInput;
-  selection: Selection | null;
+  selection: Selection;
   onChange: (next: TemplateInput) => void;
-  onSelect: (selection: Selection | null) => void;
+  onSelect: (selection: Selection) => void;
 }
 
 const PAGE_FORMATS = ['{page}', '{page} / {total}', 'Página {page} de {total}'];
 
 const ELEMENT_TYPES: TemplateElement['type'][] = ['text', 'image', 'pageNumber', 'date'];
+
+function PositionBlock({
+  element,
+  onChange,
+}: {
+  element: TemplateElement;
+  onChange: (next: TemplateElement) => void;
+}) {
+  const setAlign = (align: TemplateElement['align']) =>
+    onChange({ ...element, align, xOffsetMm: 0 } as TemplateElement);
+  return (
+    <>
+      <span className="label pane__title">posição</span>
+      <div className="align-shortcut" role="group" aria-label="alinhamento">
+        <button
+          type="button"
+          className={`btn btn--sm btn--ghost ${element.align === 'left' ? 'align-shortcut__active' : ''}`}
+          onClick={() => setAlign('left')}
+          aria-pressed={element.align === 'left'}
+        >
+          ⇤ esq.
+        </button>
+        <button
+          type="button"
+          className={`btn btn--sm btn--ghost ${element.align === 'center' ? 'align-shortcut__active' : ''}`}
+          onClick={() => setAlign('center')}
+          aria-pressed={element.align === 'center'}
+        >
+          ↔ centro
+        </button>
+        <button
+          type="button"
+          className={`btn btn--sm btn--ghost ${element.align === 'right' ? 'align-shortcut__active' : ''}`}
+          onClick={() => setAlign('right')}
+          aria-pressed={element.align === 'right'}
+        >
+          ⇥ dir.
+        </button>
+      </div>
+      <div className="grid-2" style={{ marginTop: 10 }}>
+        <label className="field">
+          <span className="label">x offset (mm)</span>
+          <input
+            type="number"
+            className="measure"
+            step={0.5}
+            value={element.xOffsetMm}
+            onChange={(event) => onChange({ ...element, xOffsetMm: Number(event.target.value) })}
+          />
+        </label>
+        <label className="field">
+          <span className="label">y (mm)</span>
+          <input
+            type="number"
+            className="measure"
+            step={0.5}
+            min={0}
+            value={element.yMm}
+            onChange={(event) => onChange({ ...element, yMm: Number(event.target.value) })}
+          />
+        </label>
+      </div>
+    </>
+  );
+}
 
 function TextProps({
   element,
@@ -222,41 +288,84 @@ function ElementProps({
 }
 
 export function Inspector({ template, selection, onChange, onSelect }: InspectorProps) {
+  const selectedIndex = selection && selection.index !== null ? selection.index : null;
+  const selected =
+    selection && selectedIndex !== null ? template[selection.band].elements[selectedIndex] : null;
+
+  // Teclado: nudge de posição, remover, desselecionar. Só quando há elemento
+  // selecionado e o foco NÃO está num campo de texto (senão as setas movem o cursor).
+  useEffect(() => {
+    if (!selection || selectedIndex === null || !selected) return;
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')
+      ) {
+        return;
+      }
+      const amount = event.shiftKey ? NUDGE_FINE_MM : NUDGE_MM;
+      const dxScreen =
+        event.key === 'ArrowLeft' ? -amount : event.key === 'ArrowRight' ? amount : 0;
+      const dy = event.key === 'ArrowUp' ? -amount : event.key === 'ArrowDown' ? amount : 0;
+      if (dxScreen !== 0 || dy !== 0) {
+        event.preventDefault();
+        const dxOffset = selected.align === 'right' ? -dxScreen : dxScreen;
+        const next: TemplateElement = {
+          ...selected,
+          xOffsetMm: selected.xOffsetMm + dxOffset,
+          yMm: Math.max(0, selected.yMm + dy),
+        } as TemplateElement;
+        onChange(replaceElement(template, { band: selection.band, index: selectedIndex }, next));
+        return;
+      }
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault();
+        onChange(
+          updateBand(template, selection.band, (list) => list.filter((_, i) => i !== selectedIndex)),
+        );
+        onSelect({ band: selection.band, index: null });
+        return;
+      }
+      if (event.key === 'Escape') {
+        onSelect(null);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selection, selectedIndex, selected, template, onChange, onSelect]);
+
   if (!selection) {
     return (
       <div className="pane pane--right">
         <span className="label pane__title">elemento</span>
         <p className="hint">
-          Clique numa das três zonas do cabeçalho ou do rodapé, na folha, para começar a montar.
+          Clique num elemento na folha para editá-lo, ou numa faixa para adicionar novos.
         </p>
       </div>
     );
   }
 
-  const { band, zone } = selection;
-  const elements = template[band].zones[zone];
-  const selectedIndex = selection.kind === 'element' ? selection.index : null;
-  const selected = selectedIndex === null ? null : elements[selectedIndex];
+  const { band } = selection;
+  const elements = template[band].elements;
 
   const addElement = (type: TemplateElement['type']) => {
-    onChange(updateZone(template, band, zone, (list) => [...list, makeElement(type)]));
-    onSelect({ kind: 'element', band, zone, index: elements.length });
+    onChange(updateBand(template, band, (list) => [...list, makeElement(type)]));
+    onSelect({ band, index: elements.length });
   };
 
   const removeSelected = () => {
     if (selectedIndex === null) return;
-    onChange(updateZone(template, band, zone, (list) => list.filter((_, i) => i !== selectedIndex)));
-    onSelect({ kind: 'zone', band, zone });
+    onChange(updateBand(template, band, (list) => list.filter((_, i) => i !== selectedIndex)));
+    onSelect({ band, index: null });
   };
 
   return (
     <div className="pane pane--right">
-      <span className="label pane__title">
-        {BAND_LABEL[band]} · {ZONE_LABEL[zone]}
-      </span>
+      <span className="label pane__title">{BAND_LABEL[band]}</span>
 
       {elements.length === 0 ? (
-        <p className="hint">Zona vazia.</p>
+        <p className="hint">Faixa vazia.</p>
       ) : (
         <div className="stack">
           {elements.map((element, index) => (
@@ -264,7 +373,7 @@ export function Inspector({ template, selection, onChange, onSelect }: Inspector
               key={index}
               type="button"
               className={`elrow ${index === selectedIndex ? 'elrow--selected' : ''}`}
-              onClick={() => onSelect({ kind: 'element', band, zone, index })}
+              onClick={() => onSelect({ band, index })}
             >
               <span className="elrow__kind">{ELEMENT_LABEL[element.type]}</span>
               <span className="elrow__desc">{describeElement(element)}</span>
@@ -276,7 +385,12 @@ export function Inspector({ template, selection, onChange, onSelect }: Inspector
       <div className="addmenu">
         <span className="label addmenu__title">adicionar</span>
         {ELEMENT_TYPES.map((type) => (
-          <button key={type} type="button" className="btn btn--sm btn--ghost" onClick={() => addElement(type)}>
+          <button
+            key={type}
+            type="button"
+            className="btn btn--sm btn--ghost"
+            onClick={() => addElement(type)}
+          >
             <span className="addmenu__plus">+</span>
             {ELEMENT_LABEL[type]}
           </button>
@@ -289,9 +403,17 @@ export function Inspector({ template, selection, onChange, onSelect }: Inspector
           <ElementProps
             element={selected}
             onChange={(next) =>
-              onChange(replaceElement(template, { kind: 'element', band, zone, index: selectedIndex }, next))
+              onChange(replaceElement(template, { band, index: selectedIndex }, next))
             }
           />
+          <div style={{ marginTop: 14 }}>
+            <PositionBlock
+              element={selected}
+              onChange={(next) =>
+                onChange(replaceElement(template, { band, index: selectedIndex }, next))
+              }
+            />
+          </div>
           <div style={{ marginTop: 14 }}>
             <button type="button" className="btn btn--sm btn--danger" onClick={removeSelected}>
               Remover elemento
