@@ -195,7 +195,21 @@ export function TemplateEditor({ templateId, onBack }: TemplateEditorProps) {
           {/* a folha mede este container, não a bancada: assim um aviso acima
               dela reduz a escala em vez de empurrar o rodapé para fora */}
           <div className="bench__stage">
-            <Sheet template={template} assets={assets} selection={selection} onSelect={setSelection} />
+            <Sheet
+              template={template}
+              assets={assets}
+              selection={selection}
+              onSelect={setSelection}
+              onElementChange={(band, index, next) =>
+                edit({
+                  ...template,
+                  [band]: {
+                    ...template[band],
+                    elements: template[band].elements.map((e, i) => (i === index ? next : e)),
+                  },
+                })
+              }
+            />
           </div>
 
           {!selection && (
