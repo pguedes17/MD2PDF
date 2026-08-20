@@ -27,6 +27,11 @@ function makeTemplate(overrides: Partial<Template> = {}): Template {
       h2: { color: '#111111', bold: true, fontSizePt: 16 },
       h3: { color: '#111111', bold: true, fontSizePt: 13 },
     },
+    cover: {
+      enabled: false,
+      applyHeaderFooter: false,
+      elements: [],
+    },
     ...overrides,
   };
 }
@@ -263,5 +268,42 @@ describe('buildTemplateOpenApi', () => {
     expect(docOf(makeTemplate(), 'https://md2pdf.example.com').servers[0]!.url).toBe(
       'https://md2pdf.example.com',
     );
+  });
+
+  it('schema OpenAPI expõe cover, headings e body.font', () => {
+    const spec = buildTemplateOpenApi(makeTemplate()) as any;
+    const tmpl = spec.components.schemas.Template;
+    expect(tmpl.properties.cover).toBeDefined();
+    expect(tmpl.properties.headings).toBeDefined();
+    expect(tmpl.properties.body.properties.font).toBeDefined();
+  });
+
+  it('body.font.customFontId é opcional (não aparece em required)', () => {
+    const spec = buildTemplateOpenApi(makeTemplate()) as any;
+    const font = spec.components.schemas.Template.properties.body.properties.font;
+    expect(font.properties.family).toBeDefined();
+    expect(font.properties.customFontId).toBeDefined();
+    const required: string[] = font.required ?? [];
+    expect(required).not.toContain('customFontId');
+    expect(required).toContain('family');
+  });
+
+  it('headings expõe h1, h2 e h3 com color, bold e fontSizePt', () => {
+    const spec = buildTemplateOpenApi(makeTemplate()) as any;
+    const headings = spec.components.schemas.Template.properties.headings;
+    for (const level of ['h1', 'h2', 'h3']) {
+      const h = headings.properties[level];
+      expect(h.properties.color).toBeDefined();
+      expect(h.properties.bold).toBeDefined();
+      expect(h.properties.fontSizePt).toBeDefined();
+    }
+  });
+
+  it('cover expõe enabled, applyHeaderFooter e elements (array)', () => {
+    const spec = buildTemplateOpenApi(makeTemplate()) as any;
+    const cover = spec.components.schemas.Template.properties.cover;
+    expect(cover.properties.enabled.type).toBe('boolean');
+    expect(cover.properties.applyHeaderFooter.type).toBe('boolean');
+    expect(cover.properties.elements.type).toBe('array');
   });
 });

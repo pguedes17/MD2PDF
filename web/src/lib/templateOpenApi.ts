@@ -90,6 +90,124 @@ export function buildTemplateOpenApi(template: Template, options: BuildOptions =
         ].join('')
       : '';
 
+  const headingLevelSchema = {
+    type: 'object',
+    properties: {
+      color: { type: 'string', description: 'Cor hexadecimal, ex.: #111111.' },
+      bold: { type: 'boolean' },
+      fontSizePt: { type: 'number', minimum: 4, maximum: 72 },
+    },
+    required: ['color', 'bold', 'fontSizePt'],
+  };
+
+  const coverElementSchema = {
+    type: 'object',
+    description: 'Elemento de capa (image, text ou date).',
+    properties: {
+      type: { type: 'string', enum: ['image', 'text', 'date'] },
+      align: { type: 'string', enum: ['left', 'center', 'right'] },
+      xOffsetMm: { type: 'number' },
+      yMm: { type: 'number' },
+    },
+    required: ['type'],
+  };
+
+  const templateSchema = {
+    type: 'object',
+    description: 'Configuração completa do template md2pdf.',
+    properties: {
+      id: { type: 'string' },
+      name: { type: 'string' },
+      page: {
+        type: 'object',
+        properties: {
+          format: { type: 'string', enum: ['A4', 'Letter'] },
+          orientation: { type: 'string', enum: ['portrait', 'landscape'] },
+          margins: {
+            type: 'object',
+            properties: {
+              top: { type: 'number' },
+              right: { type: 'number' },
+              bottom: { type: 'number' },
+              left: { type: 'number' },
+            },
+            required: ['top', 'right', 'bottom', 'left'],
+          },
+        },
+        required: ['format', 'orientation', 'margins'],
+      },
+      header: {
+        type: 'object',
+        properties: {
+          heightMm: { type: 'number' },
+          elements: { type: 'array', items: { type: 'object' } },
+        },
+        required: ['heightMm', 'elements'],
+      },
+      footer: {
+        type: 'object',
+        properties: {
+          heightMm: { type: 'number' },
+          elements: { type: 'array', items: { type: 'object' } },
+        },
+        required: ['heightMm', 'elements'],
+      },
+      body: {
+        type: 'object',
+        properties: {
+          font: {
+            type: 'object',
+            description: 'Fonte do corpo do documento.',
+            properties: {
+              family: {
+                type: 'string',
+                description: 'Família da fonte (CSS font-family).',
+              },
+              customFontId: {
+                type: 'string',
+                description: 'Id de uma fonte personalizada carregada na API (fnt_…). Opcional.',
+                pattern: '^fnt_[A-Za-z0-9_-]{12}$',
+              },
+            },
+            required: ['family'],
+          },
+          fontSizePt: { type: 'number' },
+          color: { type: 'string' },
+          lineHeight: { type: 'number' },
+        },
+        required: ['font', 'fontSizePt', 'color', 'lineHeight'],
+      },
+      headings: {
+        type: 'object',
+        description: 'Estilos de cabeçalho h1/h2/h3.',
+        properties: {
+          h1: headingLevelSchema,
+          h2: headingLevelSchema,
+          h3: headingLevelSchema,
+        },
+        required: ['h1', 'h2', 'h3'],
+      },
+      cover: {
+        type: 'object',
+        description: 'Configuração da página de capa.',
+        properties: {
+          enabled: { type: 'boolean', description: 'Liga/desliga a página de capa.' },
+          applyHeaderFooter: {
+            type: 'boolean',
+            description: 'Aplica o cabeçalho e rodapé do template na capa.',
+          },
+          elements: {
+            type: 'array',
+            description: 'Elementos posicionados na capa.',
+            items: coverElementSchema,
+          },
+        },
+        required: ['enabled', 'applyHeaderFooter', 'elements'],
+      },
+    },
+    required: ['id', 'name', 'page', 'header', 'footer', 'body', 'headings', 'cover'],
+  };
+
   return {
     openapi: '3.0.3',
     info: {
@@ -98,6 +216,11 @@ export function buildTemplateOpenApi(template: Template, options: BuildOptions =
       description: `Converte Markdown em PDF usando o template "${template.name}" (id fixo ${template.id}).`,
     },
     servers: [{ url: serverUrl }],
+    components: {
+      schemas: {
+        Template: templateSchema,
+      },
+    },
     paths: {
       '/api/convert': {
         post: {
