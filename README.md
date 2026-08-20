@@ -238,6 +238,10 @@ Além disso o CSS gerado já cuida do que costuma sair feio:
 | `POST` | `/api/assets` | Upload de imagem (multipart, campo `file`) |
 | `GET` | `/api/assets/:id` | Serve a imagem |
 | `DELETE` | `/api/assets/:id` | Remove a imagem |
+| `POST` | `/api/fonts` | Upload de fonte customizada (.ttf/.otf) |
+| `GET` | `/api/fonts` | Lista as fontes |
+| `GET` | `/api/fonts/:id` | Serve o binário da fonte |
+| `DELETE` | `/api/fonts/:id` | Remove (erro 409 se referenciada por template) |
 | `GET` | `/health` | Sinal de vida |
 
 Erros vêm sempre no mesmo formato:
@@ -288,6 +292,30 @@ põe elementos:
 > `header.heightMm + 5`, e o mesmo vale para o rodapé. Sem isso o Chromium corta a
 > faixa **sem avisar** — então o schema recusa, e o editor desenha o conflito na
 > folha em vez de só mostrar uma mensagem.
+
+### Capa (opcional)
+
+Quando `cover.enabled` é `true`, o template gera uma primeira página customizada com
+layout completamente livre. Elementos (texto, imagem, data) são posicionados por
+coordenadas absolutas em milímetros, sem hierarquia de fluxo. Suporta `{{variáveis}}`
+resolvidas na conversão.
+
+O checkbox "aplicar header/footer na capa" controla se a faixa de cabeçalho/rodapé
+aparece na página 1. Quando desligado (padrão), a capa é gerada como PDF separado e
+concatenada ao documento — a numeração `{page}/{total}` do rodapé começa em `1/N` a
+partir da página 2 (primeira página do conteúdo).
+
+### Fonte
+
+`body.font.family` escolhe uma fonte web-safe da lista curada de presets. Para fontes
+customizadas, use `body.font.customFontId` referenciando um upload feito via
+`POST /api/fonts`. Fontes customizadas são automaticamente embutidas no PDF como
+`@font-face` com encapsulamento base64, sem dependências externas.
+
+### Cabeçalhos
+
+`headings.h1`, `headings.h2` e `headings.h3` configuram independentemente cor, negrito
+e tamanho para cada nível. Os níveis h4, h5 e h6 herdam o estilo de h3 automaticamente.
 
 ---
 
