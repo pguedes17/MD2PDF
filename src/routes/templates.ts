@@ -68,6 +68,7 @@ export async function templateRoutes(app: FastifyInstance, deps: AppDeps): Promi
     const bundle = parseOrThrow(TemplateBundleSchema, request.body);
     const created = await importTemplateBundle(bundle, {
       assetRepo: deps.assetRepo,
+      fontRepo: deps.fontRepo,
       templateRepo: deps.templateRepo,
     });
     return reply.code(201).send(created);
@@ -86,7 +87,7 @@ export async function templateRoutes(app: FastifyInstance, deps: AppDeps): Promi
   app.get<{ Params: { id: string } }>('/api/templates/:id/export', async (request, reply) => {
     const template = await deps.templateRepo.get(request.params.id);
     if (!template) throw new TemplateNotFoundError(request.params.id);
-    const bundle = await buildTemplateBundle(template, deps.assetRepo);
+    const bundle = await buildTemplateBundle(template, deps.assetRepo, deps.fontRepo);
     return reply
       .type('application/json')
       .header('content-disposition', `attachment; filename="${bundleFilename(template.name)}"`)

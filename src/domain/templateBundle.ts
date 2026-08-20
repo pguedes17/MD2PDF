@@ -6,6 +6,7 @@ import {
   type TemplateInput,
 } from './template.js';
 import { ALLOWED_IMAGE_MIME, type AssetRepo } from '../storage/assetRepo.js';
+import { ALLOWED_FONT_MIMES, type FontRepo } from '../storage/fontRepo.js';
 import type { TemplateRepo } from '../storage/templateRepo.js';
 
 /**
@@ -28,12 +29,24 @@ const BundleAssetSchema = z.object({
   dataBase64: z.string().min(1),
 });
 
+const allowedFontMimes = ALLOWED_FONT_MIMES;
+
+const BundleFontSchema = z.object({
+  fontId: z.string().min(1),
+  family: z.string().min(1),
+  originalName: z.string().default('font'),
+  mimeType: z.enum(allowedFontMimes),
+  dataBase64: z.string().min(1),
+});
+
 export const TemplateBundleSchema = z.object({
   template: TemplateInputSchema,
   assets: z.array(BundleAssetSchema).default([]),
+  fonts: z.array(BundleFontSchema).default([]),
 });
 
 export type TemplateBundleAsset = z.infer<typeof BundleAssetSchema>;
+export type BundleFont = z.infer<typeof BundleFontSchema>;
 export type TemplateBundle = z.infer<typeof TemplateBundleSchema>;
 
 /** Percorre header/footer coletando os assetIds referenciados. */
@@ -50,10 +63,13 @@ function referencedAssetIds(template: TemplateInput | Template): string[] {
 /** Constrói o bundle a partir de um template já persistido e do assetRepo.
  *  Assets referenciados mas ausentes são simplesmente omitidos — quem
  *  importar recebe o template com a referência quebrada (mesmo estado em
- *  que ele estaria se salvasse sem enviar a imagem). */
+ *  que ele estaria se salvasse sem enviar a imagem).
+ *  Fontes referenciadas via customFontId também são incluídas; se a fonte
+ *  não for encontrada no repo, é silenciosamente omitida. */
 export async function buildTemplateBundle(
   template: Template,
   assetRepo: AssetRepo,
+  fontRepo: FontRepo,
 ): Promise<TemplateBundle> {
   // Remove id/timestamps: o servidor gera na importação.
   const { id: _id, version: _v, createdAt: _c, updatedAt: _u, ...rest } = template;
@@ -74,7 +90,22 @@ export async function buildTemplateBundle(
     });
   }
 
-  return { template: rest, assets };
+  const fonts: BundleFont[] = [];
+  const fontId = template.body?.font?.customFontId;
+  if (fontId) {
+    const found = await fontRepo.get(fontId);
+    if (found) {
+      fonts.push({
+        fontId,
+        family: found.meta.family,
+        originalName: found.meta.filename,
+        mimeType: found.meta.mimeType,
+        dataBase64: found.data.toString('base64'),
+      });
+    }
+  }
+
+  return { template: rest, assets, fonts };
 }
 
 /** Reescreve os assetIds do template segundo o mapa `antigo → novo`. */
@@ -93,10 +124,11 @@ function remapAssetIds(template: TemplateInput, map: Map<string, string>): Templ
 
 export interface ImportBundleDeps {
   assetRepo: AssetRepo;
+  fontRepo: FontRepo;
   templateRepo: TemplateRepo;
 }
 
-/** Importa um bundle: valida, recria assets, remapeia referências, cria template. */
+/** Importa um bundle: valida, recria assets e fontes, remapeia referências, cria template. */
 export async function importTemplateBundle(
   bundle: TemplateBundle,
   deps: ImportBundleDeps,
@@ -104,16 +136,41 @@ export async function importTemplateBundle(
   const parsed = TemplateBundleSchema.parse(bundle);
 
   // Salva cada asset e monta o mapa antigo→novo.
-  const map = new Map<string, string>();
+  const assetMap = new Map<string, string>();
   for (const asset of parsed.assets) {
     const meta = await deps.assetRepo.save({
       originalName: asset.originalName,
       mime: asset.mime,
       data: Buffer.from(asset.dataBase64, 'base64'),
     });
-    map.set(asset.assetId, meta.id);
+    assetMap.set(asset.assetId, meta.id);
   }
 
-  const rewritten = remapAssetIds(parsed.template, map);
+  // Salva cada fonte e monta o mapa antigo→novo.
+  const fontMap = new Map<string, string>();
+  for (const f of parsed.fonts) {
+    const meta = await deps.fontRepo.save({
+      originalName: f.originalName,
+      declaredFamily: f.family,
+      mime: f.mimeType,
+      data: Buffer.from(f.dataBase64, 'base64'),
+    });
+    fontMap.set(f.fontId, meta.id);
+  }
+
+  let rewritten = remapAssetIds(parsed.template, assetMap);
+
+  // Remapeia customFontId se necessário.
+  const oldFontId = rewritten.body?.font?.customFontId;
+  if (oldFontId && fontMap.has(oldFontId)) {
+    rewritten = {
+      ...rewritten,
+      body: {
+        ...rewritten.body,
+        font: { ...rewritten.body.font, customFontId: fontMap.get(oldFontId)! },
+      },
+    };
+  }
+
   return deps.templateRepo.create(rewritten);
 }

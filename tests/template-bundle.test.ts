@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createTemplateRepo } from '../src/storage/templateRepo.js';
 import { createAssetRepo } from '../src/storage/assetRepo.js';
+import { createFontRepo } from '../src/storage/fontRepo.js';
 import { makeBlankTemplateInput } from '../src/domain/template.js';
 import {
   buildTemplateBundle,
@@ -13,9 +14,15 @@ import {
 } from '../src/domain/templateBundle.js';
 
 let dir: string;
+let assetRepo: ReturnType<typeof createAssetRepo>;
+let fontRepo: ReturnType<typeof createFontRepo>;
+let templateRepo: ReturnType<typeof createTemplateRepo>;
 
 beforeEach(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bundle-'));
+  assetRepo = createAssetRepo(path.join(dir, 'a'));
+  fontRepo = createFontRepo(path.join(dir, 'f'));
+  templateRepo = createTemplateRepo(path.join(dir, 't'));
 });
 
 afterEach(async () => {
@@ -51,11 +58,8 @@ describe('TemplateBundleSchema', () => {
 
 describe('buildTemplateBundle', () => {
   it('empacota template e assets referenciados', async () => {
-    const assets = createAssetRepo(path.join(dir, 'a'));
-    const templates = createTemplateRepo(path.join(dir, 't'));
-
-    const asset = await assets.save({ originalName: 'logo.png', mime: 'image/png', data: PNG });
-    const template = await templates.create({
+    const asset = await assetRepo.save({ originalName: 'logo.png', mime: 'image/png', data: PNG });
+    const template = await templateRepo.create({
       ...makeBlankTemplateInput('Com logo'),
       header: {
         heightMm: 20,
@@ -65,7 +69,7 @@ describe('buildTemplateBundle', () => {
       },
     });
 
-    const bundle = await buildTemplateBundle(template, assets);
+    const bundle = await buildTemplateBundle(template, assetRepo, fontRepo);
     expect(bundle.template.name).toBe('Com logo');
     // id/timestamps não aparecem no template do bundle (o servidor gera na importação)
     expect((bundle.template as Record<string, unknown>).id).toBeUndefined();
@@ -81,10 +85,7 @@ describe('buildTemplateBundle', () => {
   });
 
   it('omite assets que sumiram do repo em vez de estourar', async () => {
-    const assets = createAssetRepo(path.join(dir, 'a'));
-    const templates = createTemplateRepo(path.join(dir, 't'));
-
-    const template = await templates.create({
+    const template = await templateRepo.create({
       ...makeBlankTemplateInput('Órfão'),
       header: {
         heightMm: 20,
@@ -94,7 +95,7 @@ describe('buildTemplateBundle', () => {
       },
     });
 
-    const bundle = await buildTemplateBundle(template, assets);
+    const bundle = await buildTemplateBundle(template, assetRepo, fontRepo);
     expect(bundle.assets).toEqual([]);
     // a referência quebrada continua no template — quem importar vai receber
     // um assetId que ainda precisa ser resolvido.
@@ -103,20 +104,26 @@ describe('buildTemplateBundle', () => {
   });
 
   it('bundle sem imagens tem assets vazio', async () => {
-    const assets = createAssetRepo(path.join(dir, 'a'));
-    const templates = createTemplateRepo(path.join(dir, 't'));
-
-    const template = await templates.create(makeBlankTemplateInput('Sem imagem'));
-    const bundle = await buildTemplateBundle(template, assets);
+    const template = await templateRepo.create(makeBlankTemplateInput('Sem imagem'));
+    const bundle = await buildTemplateBundle(template, assetRepo, fontRepo);
     expect(bundle.assets).toEqual([]);
+  });
+
+  it('bundle inclui fonte quando o template referencia customFontId', async () => {
+    const meta = await fontRepo.save({ originalName: 'x.ttf', declaredFamily: 'F, sans', mime: 'font/ttf', data: Buffer.alloc(32, 1) });
+    const t = makeBlankTemplateInput() as any;
+    t.body.font = { family: 'F, sans', customFontId: meta.id };
+    const template = await templateRepo.create(t);
+
+    const bundle = await buildTemplateBundle(template, assetRepo, fontRepo);
+    expect(bundle.fonts).toHaveLength(1);
+    expect(bundle.fonts[0]!.family).toBe('F, sans');
+    expect(bundle.fonts[0]!.dataBase64.length).toBeGreaterThan(0);
   });
 });
 
 describe('importTemplateBundle', () => {
   it('cria assets com ids novos e reescreve as referências', async () => {
-    const assets = createAssetRepo(path.join(dir, 'a'));
-    const templates = createTemplateRepo(path.join(dir, 't'));
-
     const bundle: TemplateBundle = {
       template: {
         ...makeBlankTemplateInput('Portado'),
@@ -130,9 +137,10 @@ describe('importTemplateBundle', () => {
       assets: [
         { assetId: 'ast_original', mime: 'image/png', originalName: 'logo.png', dataBase64: PNG.toString('base64') },
       ],
+      fonts: [],
     };
 
-    const created = await importTemplateBundle(bundle, { assetRepo: assets, templateRepo: templates });
+    const created = await importTemplateBundle(bundle, { assetRepo, fontRepo, templateRepo });
     expect(created.name).toBe('Portado');
     expect(created.id).toMatch(/^tpl_/);
     const el = created.header.elements[0]!;
@@ -140,15 +148,12 @@ describe('importTemplateBundle', () => {
     expect(el.type === 'image' && el.assetId).not.toBe('ast_original');
 
     // o binário do asset novo é o mesmo do bundle
-    const restored = await assets.get((created.header.elements[0]! as { assetId: string }).assetId);
+    const restored = await assetRepo.get((created.header.elements[0]! as { assetId: string }).assetId);
     expect(restored?.data.equals(PNG)).toBe(true);
     expect(restored?.meta.mime).toBe('image/png');
   });
 
   it('remapeia várias referências ao mesmo assetId para o mesmo asset novo', async () => {
-    const assets = createAssetRepo(path.join(dir, 'a'));
-    const templates = createTemplateRepo(path.join(dir, 't'));
-
     const bundle: TemplateBundle = {
       template: {
         ...makeBlankTemplateInput('Duas logos'),
@@ -163,9 +168,10 @@ describe('importTemplateBundle', () => {
       assets: [
         { assetId: 'ast_x', mime: 'image/png', originalName: 'l.png', dataBase64: PNG.toString('base64') },
       ],
+      fonts: [],
     };
 
-    const created = await importTemplateBundle(bundle, { assetRepo: assets, templateRepo: templates });
+    const created = await importTemplateBundle(bundle, { assetRepo, fontRepo, templateRepo });
     const [a, b] = created.header.elements;
     expect(a?.type === 'image' && b?.type === 'image' && a.assetId).toBe(
       b?.type === 'image' ? b.assetId : '',
@@ -173,9 +179,6 @@ describe('importTemplateBundle', () => {
   });
 
   it('recusa bundle com template inválido (propaga issues)', async () => {
-    const assets = createAssetRepo(path.join(dir, 'a'));
-    const templates = createTemplateRepo(path.join(dir, 't'));
-
     const bundle = {
       template: {
         ...makeBlankTemplateInput('Bad'),
@@ -183,19 +186,17 @@ describe('importTemplateBundle', () => {
         page: { format: 'A4', orientation: 'portrait', margins: { top: 1, right: 20, bottom: 25, left: 20 } },
       },
       assets: [],
+      fonts: [],
     } as unknown as TemplateBundle;
 
     await expect(
-      importTemplateBundle(bundle, { assetRepo: assets, templateRepo: templates }),
+      importTemplateBundle(bundle, { assetRepo, fontRepo, templateRepo }),
     ).rejects.toThrow();
   });
 
   it('round-trip: export → import preserva o layout dos elementos', async () => {
-    const assets = createAssetRepo(path.join(dir, 'a'));
-    const templates = createTemplateRepo(path.join(dir, 't'));
-
-    const asset = await assets.save({ originalName: 'l.png', mime: 'image/png', data: PNG });
-    const original = await templates.create({
+    const asset = await assetRepo.save({ originalName: 'l.png', mime: 'image/png', data: PNG });
+    const original = await templateRepo.create({
       ...makeBlankTemplateInput('Round-trip'),
       header: {
         heightMm: 22,
@@ -206,8 +207,8 @@ describe('importTemplateBundle', () => {
       },
     });
 
-    const bundle = await buildTemplateBundle(original, assets);
-    const imported = await importTemplateBundle(bundle, { assetRepo: assets, templateRepo: templates });
+    const bundle = await buildTemplateBundle(original, assetRepo, fontRepo);
+    const imported = await importTemplateBundle(bundle, { assetRepo, fontRepo, templateRepo });
 
     expect(imported.header.elements).toHaveLength(2);
     expect(imported.header.elements[0]).toMatchObject({
@@ -225,5 +226,32 @@ describe('importTemplateBundle', () => {
     });
     // id de template diferente
     expect(imported.id).not.toBe(original.id);
+  });
+
+  it('import recria a fonte e remapeia customFontId', async () => {
+    const fontData = Buffer.alloc(64, 2);
+    const bundle: TemplateBundle = {
+      template: {
+        ...makeBlankTemplateInput('Com fonte'),
+        body: {
+          ...makeBlankTemplateInput('Com fonte').body,
+          font: { family: 'MyFont, sans-serif', customFontId: 'fnt_bundleorig12' },
+        },
+      },
+      assets: [],
+      fonts: [
+        {
+          fontId: 'fnt_bundleorig12',
+          family: 'MyFont, sans-serif',
+          originalName: 'myfont.ttf',
+          mimeType: 'font/ttf',
+          dataBase64: fontData.toString('base64'),
+        },
+      ],
+    };
+
+    const created = await importTemplateBundle(bundle, { assetRepo, fontRepo, templateRepo });
+    expect(created.body.font.customFontId).toMatch(/^fnt_/);
+    expect(created.body.font.customFontId).not.toBe('fnt_bundleoriginal');
   });
 });
