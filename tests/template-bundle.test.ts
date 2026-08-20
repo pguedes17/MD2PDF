@@ -39,6 +39,7 @@ describe('TemplateBundleSchema', () => {
     const bundle: TemplateBundle = {
       template: makeBlankTemplateInput('X'),
       assets: [],
+      fonts: [],
     };
     expect(TemplateBundleSchema.safeParse(bundle).success).toBe(true);
   });

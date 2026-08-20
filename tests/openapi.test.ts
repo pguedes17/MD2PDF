@@ -6,7 +6,7 @@ function makeTemplate(overrides: Partial<Template> = {}): Template {
   return {
     id: 'tpl_ABCDEF123',
     name: 'Contrato Padrão',
-    version: 1,
+    version: 2,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-02T00:00:00.000Z',
     page: {
