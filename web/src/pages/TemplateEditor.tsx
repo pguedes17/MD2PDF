@@ -14,6 +14,7 @@ import {
   makeCoverElement,
   nextCoverYMm,
 } from '../components/CoverEditor.js';
+import { Icon } from '../components/Icon.js';
 import { PAGE_SIZES_MM } from '@shared/domain/template.js';
 import { collectAssetIds, type Selection } from '../lib/templateModel.js';
 
@@ -204,6 +205,7 @@ export function TemplateEditor({ templateId, onBack }: TemplateEditorProps) {
             title={dirty ? 'Salve antes de exportar' : 'Exportar bundle .md2pdf.json'}
             onClick={() => void exportBundle()}
           >
+            <Icon name="file-down" />
             Exportar
           </button>
           <button
@@ -212,7 +214,8 @@ export function TemplateEditor({ templateId, onBack }: TemplateEditorProps) {
             disabled={saving || blocked || !dirty}
             onClick={() => void save().then((ok) => ok && announce('Template salvo'))}
           >
-            {saving ? 'Salvando...' : 'Salvar'}
+            <Icon name="check" />
+            {saving ? 'Salvando…' : 'Salvar'}
           </button>
           <button
             type="button"
@@ -223,6 +226,7 @@ export function TemplateEditor({ templateId, onBack }: TemplateEditorProps) {
               window.location.hash = `#/convert/${templateId}`;
             }}
           >
+            <Icon name="external-link" />
             Gerar PDF
           </button>
           <button
@@ -231,7 +235,8 @@ export function TemplateEditor({ templateId, onBack }: TemplateEditorProps) {
             disabled={previewing || blocked}
             onClick={() => void preview()}
           >
-            {previewing ? 'Gerando...' : 'Gerar PDF de exemplo'}
+            <Icon name="file-down" />
+            {previewing ? 'Gerando…' : 'Gerar PDF de exemplo'}
           </button>
         </div>
       </header>
@@ -419,21 +424,24 @@ export function TemplateEditor({ templateId, onBack }: TemplateEditorProps) {
                           className="btn btn--sm btn--ghost"
                           onClick={() => addCoverElement('text')}
                         >
-                          + texto
+                          <Icon name="plus" />
+                          texto
                         </button>
                         <button
                           type="button"
                           className="btn btn--sm btn--ghost"
                           onClick={() => addCoverElement('image')}
                         >
-                          + imagem
+                          <Icon name="plus" />
+                          imagem
                         </button>
                         <button
                           type="button"
                           className="btn btn--sm btn--ghost"
                           onClick={() => addCoverElement('date')}
                         >
-                          + data
+                          <Icon name="plus" />
+                          data
                         </button>
                       </div>
                     </section>

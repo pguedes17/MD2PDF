@@ -3,6 +3,7 @@ import { makeBlankTemplateInput, type Template } from '@shared/domain/template.j
 import { api, ApiError } from '../api.js';
 import { Brand, LogoMark } from '../components/Logo.js';
 import { SheetThumb } from '../components/SheetThumb.js';
+import { Icon } from '../components/Icon.js';
 import { buildTemplateOpenApi } from '../lib/templateOpenApi.js';
 
 interface TemplateListProps {
@@ -18,7 +19,7 @@ function formatDate(iso: string): string {
   });
 }
 
-/** Os fatos que distinguem um template do outro, em uma linha. */
+/** Os fatos que distinguem um template do outro, em chips compactos. */
 function facts(template: Template): string[] {
   const elements = [template.header, template.footer].flatMap((band) => band.elements);
   const out = [
@@ -27,6 +28,7 @@ function facts(template: Template): string[] {
   if (elements.some((el) => el.type === 'image')) out.push('logo');
   if (elements.some((el) => el.type === 'pageNumber')) out.push('paginado');
   if (elements.some((el) => el.type === 'text' && el.value.includes('{{'))) out.push('variáveis');
+  if (template.cover.enabled) out.push('capa');
   return out;
 }
 
@@ -42,7 +44,6 @@ export function TemplateList({ onOpen, onConvert }: TemplateListProps) {
   async function reload() {
     try {
       const summaries = await api.listTemplates();
-      // O card desenha o timbre de verdade, então precisa do template inteiro.
       setTemplates(await Promise.all(summaries.map((summary) => api.getTemplate(summary.id))));
       setError(null);
     } catch (err) {
@@ -148,17 +149,24 @@ export function TemplateList({ onOpen, onConvert }: TemplateListProps) {
           disabled={importing}
           onClick={() => importInputRef.current?.click()}
         >
-          {importing ? 'Importando...' : 'Importar'}
+          <Icon name="upload" />
+          {importing ? 'Importando…' : 'Importar'}
         </button>
-        <button type="button" className="btn btn--accent" disabled={creating} onClick={() => void create()}>
-          {creating ? 'Criando...' : 'Novo template'}
+        <button
+          type="button"
+          className="btn btn--sm btn--accent"
+          disabled={creating}
+          onClick={() => void create()}
+        >
+          <Icon name="plus" />
+          {creating ? 'Criando…' : 'Novo template'}
         </button>
       </header>
 
       <div className="shell">
         <div className="list">
           <div className="masthead">
-            <div>
+            <div className="masthead__intro">
               <span className="label masthead__eyebrow">papel timbrado</span>
               <h1 className="masthead__title">
                 Monte uma vez.
@@ -166,8 +174,8 @@ export function TemplateList({ onOpen, onConvert }: TemplateListProps) {
                 Converta sempre.
               </h1>
               <p className="masthead__lede">
-                Um template guarda o cabeçalho, o rodapé e as margens de todas as páginas. Depois de
-                salvo, ele ganha um id — e é só esse id que a sua aplicação precisa saber.
+                Um template guarda o cabeçalho, o rodapé e as margens de todas as páginas. Depois
+                de salvo, ele ganha um id — e é só esse id que a sua aplicação precisa saber.
               </p>
             </div>
 
@@ -186,7 +194,11 @@ export function TemplateList({ onOpen, onConvert }: TemplateListProps) {
             </div>
           </div>
 
-          {error && <div className="notice notice--warn" style={{ marginBottom: 20 }}>{error}</div>}
+          {error && (
+            <div className="notice notice--warn" style={{ marginBottom: 20 }}>
+              {error}
+            </div>
+          )}
 
           <div className="cards">
             {templates === null &&
@@ -201,6 +213,7 @@ export function TemplateList({ onOpen, onConvert }: TemplateListProps) {
                   elementos para as zonas do cabeçalho e do rodapé.
                 </p>
                 <button type="button" className="btn btn--accent" onClick={() => void create()}>
+                  <Icon name="plus" />
                   Criar o primeiro template
                 </button>
               </div>
@@ -215,82 +228,85 @@ export function TemplateList({ onOpen, onConvert }: TemplateListProps) {
                 <SheetThumb template={template} />
 
                 <div className="card__body">
-                  <h2 className="card__name">{template.name}</h2>
+                  <header className="card__header">
+                    <h2 className="card__name" title={template.name}>
+                      {template.name}
+                    </h2>
+                    <time className="card__date" dateTime={template.updatedAt}>
+                      {formatDate(template.updatedAt)}
+                    </time>
+                  </header>
 
-                  <div className="card__facts">
+                  <div className="card__meta">
                     {facts(template).map((fact) => (
                       <span key={fact} className="fact">
                         {fact}
                       </span>
                     ))}
-                    <time className="card__date" dateTime={template.updatedAt}>
-                      {formatDate(template.updatedAt)}
-                    </time>
                   </div>
 
-                  <div className="card__foot">
-                    <div className="card__foot-row">
-                      <button
-                        type="button"
-                        className={`idchip ${copied === template.id ? 'idchip--copied' : ''}`}
-                        title="Copiar o id para usar na API"
-                        onClick={() => void copyId(template.id)}
-                      >
-                        {template.id}
-                        <span className="idchip__action">
-                          {copied === template.id ? 'copiado' : 'copiar'}
-                        </span>
-                      </button>
-
-                      <span className="card__spacer" />
-
-                      <button
-                        type="button"
-                        className="btn btn--sm btn--ghost"
-                        title="Copia um OpenAPI 3.0.3 pronto para virar tool MCP"
-                        onClick={() => void copyOpenApi(template)}
-                      >
-                        {copiedOpenApi === template.id ? 'OpenAPI copiado' : 'Copiar OpenAPI'}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn--sm btn--ghost"
-                        title="Cria uma cópia deste template e a abre no editor"
-                        onClick={() => void duplicate(template)}
-                      >
-                        Duplicar
-                      </button>
-                    </div>
-
-                    <div className="card__foot-row card__foot-row--actions">
-                      <button
-                        type="button"
-                        className="btn btn--sm btn--quiet"
-                        onClick={() => void remove(template)}
-                      >
-                        Excluir
-                      </button>
-
-                      <span className="card__spacer" />
-
-                      <button
-                        type="button"
-                        className="btn btn--sm"
-                        onClick={() => onOpen(template.id)}
-                      >
-                        Abrir
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn--sm btn--accent"
-                        title="Cole um markdown, informe as variáveis e baixe o PDF"
-                        onClick={() => onConvert(template.id)}
-                      >
-                        Gerar PDF
-                      </button>
-                    </div>
-                  </div>
+                  <button
+                    type="button"
+                    className={`idchip ${copied === template.id ? 'idchip--copied' : ''}`}
+                    title="Copiar o id para usar na API"
+                    onClick={() => void copyId(template.id)}
+                  >
+                    <span className="idchip__id">{template.id}</span>
+                    <Icon name={copied === template.id ? 'check' : 'copy'} size={13} />
+                  </button>
                 </div>
+
+                <footer className="card__foot">
+                  <div className="card__foot-secondary">
+                    <button
+                      type="button"
+                      className="btn btn--icon btn--danger"
+                      title="Excluir template"
+                      aria-label="Excluir template"
+                      onClick={() => void remove(template)}
+                    >
+                      <Icon name="trash" />
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--icon btn--quiet"
+                      title="Duplicar template"
+                      aria-label="Duplicar template"
+                      onClick={() => void duplicate(template)}
+                    >
+                      <Icon name="files" />
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn btn--icon btn--quiet ${copiedOpenApi === template.id ? 'btn--icon--ok' : ''}`}
+                      title={copiedOpenApi === template.id ? 'OpenAPI copiado' : 'Copiar OpenAPI (para tool MCP)'}
+                      aria-label="Copiar OpenAPI"
+                      onClick={() => void copyOpenApi(template)}
+                    >
+                      <Icon name={copiedOpenApi === template.id ? 'check' : 'braces'} />
+                    </button>
+                  </div>
+
+                  <div className="card__foot-primary">
+                    <button
+                      type="button"
+                      className="btn btn--sm btn--ghost"
+                      onClick={() => onOpen(template.id)}
+                    >
+                      <Icon name="edit" />
+                      Abrir
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--sm btn--accent"
+                      title="Cole um markdown, informe as variáveis e baixe o PDF"
+                      onClick={() => onConvert(template.id)}
+                    >
+                      <Icon name="file-down" />
+                      Gerar PDF
+                    </button>
+                  </div>
+                </footer>
               </article>
             ))}
           </div>

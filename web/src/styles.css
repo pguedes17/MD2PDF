@@ -262,6 +262,34 @@ button {
   border-radius: var(--r-sm);
 }
 
+/* Botão só-ícone: quadrado, sem texto, com tooltip via title. */
+.btn--icon {
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  justify-content: center;
+  gap: 0;
+}
+
+.btn--icon svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+/* Estado de confirmação em botões só-ícone (ex.: OpenAPI copiado). */
+.btn--icon--ok {
+  --btn-fg: var(--accent);
+  --btn-bd: var(--accent);
+  --btn-bg: var(--accent-wash);
+}
+
+/* SVG inline dentro de qualquer .btn segue a cor do texto. */
+.btn svg {
+  flex-shrink: 0;
+}
+
 /* botões sobre o chrome escuro — as panes e a bancada do editor também são
    chrome, então herdam o mesmo tratamento sem precisar da classe .on-dark */
 .on-dark .btn--ghost,
@@ -494,8 +522,8 @@ button {
 
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 22px;
 }
 
 .card {
@@ -533,7 +561,7 @@ button {
   align-items: flex-end;
   justify-content: center;
   /* altura fixa: uma grade de cards desalinhados parece descuido */
-  height: 176px;
+  height: 172px;
   overflow: hidden;
 }
 
@@ -567,34 +595,53 @@ button {
 }
 
 .card__body {
-  padding: 15px 17px 17px;
+  padding: 14px 17px 16px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   flex: 1;
+  min-width: 0;
+}
+
+/* Nome + data na mesma linha, alinhados. Nome tem ellipsis para não
+   estourar a largura do card. Data em mono, à direita. */
+.card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
 }
 
 .card__name {
-  font-size: 16.5px;
+  font-size: 16px;
   font-weight: 580;
   letter-spacing: -0.014em;
   margin: 0;
   line-height: 1.25;
-}
-
-.card__facts {
-  display: flex;
-  gap: 6px;
+  min-width: 0;
+  flex: 1;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .card__date {
   font-family: var(--mono);
   font-size: 10.5px;
   color: var(--ink-4);
-  margin-left: auto;
   flex-shrink: 0;
-  align-self: center;
+  letter-spacing: 0.01em;
+}
+
+/* Chips de metadata em linha própria — não competem com data pela mesma
+   linha. Se estourar a largura, quebram naturalmente sem desalinhar
+   nada. */
+.card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-height: 22px;
 }
 
 .fact {
@@ -606,57 +653,40 @@ button {
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
   padding: 2px 7px;
+  white-space: nowrap;
 }
 
-.card__foot {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: auto;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
-}
-
-/* Duas linhas: id + utilitários em cima, ciclo de vida embaixo. Wrap para
-   não amassar quando a coluna cai perto da largura mínima. */
-.card__foot-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  min-width: 0;
-}
-
-/* o id é o que se leva para a API — então é copiável, não decorativo */
+/* Id em linha própria e ocupa a largura toda — vira alvo grande e
+   inconfundível. */
 .idchip {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 7px;
+  width: 100%;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
-  padding: 4px 8px;
+  padding: 6px 10px;
   font-family: var(--mono);
   font-size: 11.5px;
   color: var(--ink-2);
   transition: border-color var(--fast), background var(--fast), color var(--fast);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.idchip__id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  text-align: left;
 }
 
 .idchip:hover {
   border-color: var(--accent);
   background: var(--accent-wash);
-  color: var(--accent);
-}
-
-.idchip__action {
-  font-size: 9.5px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-4);
-  transition: color var(--fast);
-}
-
-.idchip:hover .idchip__action {
   color: var(--accent);
 }
 
@@ -666,8 +696,31 @@ button {
   color: var(--accent);
 }
 
-.card__spacer {
-  flex: 1;
+/* Rodapé do card: linha única com dois grupos. À esquerda ficam ações
+   secundárias (icon-only): excluir, duplicar, copiar OpenAPI. À direita
+   as ações primárias: Abrir e Gerar PDF. Fundo levemente destacado do
+   corpo para separar visualmente sem borda dupla. */
+.card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 14px;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+
+.card__foot-secondary {
+  display: flex;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.card__foot-primary {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 /* ══ estados vazios e de carga ═══════════════════════════════════════════ */
