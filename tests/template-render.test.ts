@@ -321,8 +321,23 @@ describe('renderTemplate — @font-face', () => {
     t.body.font = { family: 'MinhaFonte, sans-serif', customFontId: 'fnt_abcdefghij12' };
     const r = renderTemplate(t, { fontDataUri: 'data:font/ttf;base64,AAAA' });
     expect(r.css).toContain('@font-face');
-    expect(r.css).toContain("font-family: 'MinhaFonte, sans-serif'");
+    // @font-face deve usar apenas o PRIMEIRO token do stack (sem vírgula)
+    expect(r.css).toContain("font-family: 'MinhaFonte'");
+    expect(r.css).not.toContain("font-family: 'MinhaFonte, sans-serif'");
+    // O body { font-family } continua usando o stack completo
+    expect(r.css).toContain('font-family: MinhaFonte, sans-serif');
     expect(r.css).toContain('data:font/ttf;base64,AAAA');
+  });
+
+  it('@font-face usa apenas o primeiro token do stack como nome da família', () => {
+    const t = makeBlankTemplateInput() as any;
+    t.body.font = { family: 'Roboto, sans-serif', customFontId: 'fnt_abcdefghij12' };
+    const r = renderTemplate(t, { fontDataUri: 'data:font/ttf;base64,AAAA' });
+    // Dentro de @font-face, o nome deve ser 'Roboto' e não 'Roboto, sans-serif'
+    expect(r.css).toContain("font-family: 'Roboto';");
+    expect(r.css).not.toContain("font-family: 'Roboto, sans-serif'");
+    // O body continua usando o stack completo para o fallback
+    expect(r.css).toContain('font-family: Roboto, sans-serif');
   });
 
   it('não emite @font-face quando não há customFontId', () => {

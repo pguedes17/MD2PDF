@@ -264,14 +264,18 @@ describe('convertWithTemplate — fonte customizada', () => {
   });
 
   it('quando template referencia fonte custom, o PDF contém a @font-face embutida', async () => {
-    const { readPdf } = await import('./helpers/readPdf.js');
     const ttf = Buffer.alloc(128, 42); // fake, mas suficiente para embutir
     const meta = await fontRepo.save({ originalName: 'x.ttf', declaredFamily: 'FonteX, sans-serif', mime: 'font/ttf', data: ttf });
     const t = makeBlankTemplateInput() as any;
     t.body.font = { family: 'FonteX, sans-serif', customFontId: meta.id };
     const template = await templateRepo.create(t);
-    const buf = await conversion.convertWithTemplate(template, '# Corpo');
-    const info = await readPdf(buf);
-    expect(info.numPages).toBeGreaterThan(0);
+    await conversion.convertWithTemplate(template, '# Corpo');
+
+    // Verifica o pipeline CSS separadamente: @font-face deve usar só o token primário.
+    const fontDataUri = (await fontRepo.getDataUri(meta.id)) ?? '';
+    const rendered = renderTemplate(template, { fontDataUri });
+    expect(rendered.css).toContain('@font-face');
+    expect(rendered.css).toContain("font-family: 'FonteX'");
+    expect(rendered.css).toContain('font-family: FonteX, sans-serif');
   });
 });

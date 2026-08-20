@@ -354,6 +354,7 @@ export function TemplateEditor({ templateId, onBack }: TemplateEditorProps) {
                     updateTemplate({ cover: { ...template.cover, ...patch } })
                   }
                   assets={assets}
+                  variables={{}}
                 />
               ) : (
                 <div

@@ -222,10 +222,22 @@ function bandIsEmpty(band: TemplateBand): boolean {
   return band.elements.length === 0;
 }
 
+/**
+ * Extrai o primeiro token da pilha de fontes.
+ * Ex.: "MinhaFonte, sans-serif" → "MinhaFonte"
+ *      "'Minha Fonte', serif"   → "Minha Fonte"
+ */
+function primaryFamilyToken(stack: string): string {
+  const first = stack.split(',')[0]?.trim() ?? stack;
+  // Remove aspas envolventes se presentes.
+  return first.replace(/^['"]|['"]$/g, '');
+}
+
 function buildFontFace(family: string, dataUri: string): string {
+  const name = primaryFamilyToken(family);
   const format = dataUri.startsWith('data:font/otf') ? 'opentype' : 'truetype';
   return `@font-face {
-  font-family: '${family.replace(/'/g, "\\'")}';
+  font-family: '${name.replace(/'/g, "\\'")}';
   src: url(${dataUri}) format('${format}');
   font-weight: normal;
   font-style: normal;

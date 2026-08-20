@@ -252,6 +252,6 @@ describe('importTemplateBundle', () => {
 
     const created = await importTemplateBundle(bundle, { assetRepo, fontRepo, templateRepo });
     expect(created.body.font.customFontId).toMatch(/^fnt_/);
-    expect(created.body.font.customFontId).not.toBe('fnt_bundleoriginal');
+    expect(created.body.font.customFontId).not.toBe('fnt_bundleorig12');
   });
 });
