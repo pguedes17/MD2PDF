@@ -309,3 +309,32 @@ describe('buildTemplateOpenApi', () => {
     expect(cover.properties.elements.type).toBe('array');
   });
 });
+
+import { buildImportOpenApi } from '../web/src/lib/importOpenApi.js';
+
+describe('buildImportOpenApi', () => {
+  it('inclui os 2 operations do fluxo MCP', () => {
+    const spec = buildImportOpenApi({ serverUrl: 'http://localhost:3000' }) as any;
+    expect(spec.openapi).toBe('3.0.3');
+    expect(spec.paths['/api/templates/from-docx']).toBeTruthy();
+    expect(spec.paths['/api/convert']).toBeTruthy();
+    const importOp = spec.paths['/api/templates/from-docx'].post;
+    expect(importOp.operationId).toBe('importTemplateFromDocx');
+    expect(importOp.requestBody.content['multipart/form-data']).toBeTruthy();
+    const convertOp = spec.paths['/api/convert'].post;
+    expect(convertOp.operationId).toBe('convertWithTemplate');
+    // templateId parametrizável (não enum de 1)
+    const props = convertOp.requestBody.content['application/json'].schema.properties;
+    expect(props.templateId.enum).toBeUndefined();
+    expect(props.output.enum).toEqual(['path']);
+  });
+
+  it('inclui instruções para o agente MCP no description', () => {
+    const spec = buildImportOpenApi() as any;
+    const importOp = spec.paths['/api/templates/from-docx'].post;
+    expect(importOp.description).toMatch(/docx/i);
+    expect(importOp.description).toMatch(/template\.id/i);
+    const convertOp = spec.paths['/api/convert'].post;
+    expect(convertOp.description).toMatch(/templateId/i);
+  });
+});
