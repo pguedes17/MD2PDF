@@ -9,6 +9,8 @@ import {
 import { TemplateNotFoundError } from '../conversion.js';
 import type { AppDeps } from '../app.js';
 import { parseOrThrow } from './validation.js';
+import { analyzeDocx } from '../docx/analyze.js';
+import { toTemplateInput } from '../docx/toTemplate.js';
 
 /** Nome do arquivo do bundle a partir do nome do template — só ASCII e - */
 function bundleFilename(name: string): string {
@@ -49,6 +51,30 @@ simplesmente flui até encher a página.
 
 export async function templateRoutes(app: FastifyInstance, deps: AppDeps): Promise<void> {
   app.get('/api/templates', async () => deps.templateRepo.list());
+
+  // Importação de docx — rotas específicas antes de :id para legibilidade.
+  app.post('/api/templates/analyze-docx', async (request, reply) => {
+    const file = await request.file({ limits: { fileSize: 20 * 1024 * 1024 } });
+    if (!file) return reply.code(400).send({ error: 'validation_failed', message: 'envie o docx no campo "file"' });
+    const buf = await file.toBuffer();
+    const { analysis, warnings } = await analyzeDocx(buf, deps.assetRepo);
+    return reply.send({ analysis, warnings });
+  });
+
+  app.post<{ Querystring: { name?: string } }>('/api/templates/from-docx', async (request, reply) => {
+    const file = await request.file({ limits: { fileSize: 20 * 1024 * 1024 } });
+    if (!file) return reply.code(400).send({ error: 'validation_failed', message: 'envie o docx no campo "file"' });
+    const buf = await file.toBuffer();
+    const { analysis, warnings: analyzeWarnings } = await analyzeDocx(buf, deps.assetRepo);
+    const name = request.query.name?.trim() || file.filename.replace(/\.docx$/i, '') || 'Template importado';
+    const { templateInput, warnings: mapWarnings } = toTemplateInput(analysis, name);
+    const template = await deps.templateRepo.create(templateInput);
+    return reply.code(201).send({
+      template,
+      warnings: [...analyzeWarnings, ...mapWarnings],
+      assetIds: analysis.images.map((i) => i.assetId),
+    });
+  });
 
   app.get<{ Params: { id: string } }>('/api/templates/:id', async (request, reply) => {
     const template = await deps.templateRepo.get(request.params.id);
