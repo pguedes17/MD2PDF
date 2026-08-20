@@ -5,6 +5,7 @@ const parser = new XMLParser({
   attributeNamePrefix: '@_',
   preserveOrder: false,
   parseAttributeValue: false,
+  trimValues: false,
 });
 
 export function parseXml(xml: string): unknown {
