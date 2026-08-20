@@ -348,8 +348,35 @@ export function TemplateEditor({ templateId, onBack }: TemplateEditorProps) {
 
           return (
             <div className="editor">
-              {/* Coluna esquerda: toggles + adicionar + lista de elementos */}
+              {/* Coluna esquerda: PageSettings do template (igual ao Editor tab) */}
               <aside className="pane">
+                <PageSettings template={template} templateId={templateId} onChange={edit} />
+              </aside>
+
+              {/* Coluna central: a folha da capa */}
+              <main className="bench">
+                {cover.enabled ? (
+                  <div className="bench__stage">
+                    <CoverEditor
+                      template={template}
+                      onElementChange={updateCoverElement}
+                      selected={coverSelected}
+                      onSelect={setCoverSelected}
+                      variables={{}}
+                      assets={assets}
+                    />
+                  </div>
+                ) : (
+                  <p className="bench__hint">
+                    Habilite a capa no painel à direita para começar a editá-la.
+                  </p>
+                )}
+              </main>
+
+              {/* Coluna direita: TODOS os controles da capa (toggles, adicionar,
+                  lista de elementos, inspector do elemento selecionado). Espelha
+                  o padrão do Editor tab onde o Inspector fica à direita. */}
+              <div className="pane pane--right">
                 <section className="pane__section">
                   <span className="label pane__title">capa</span>
                   <label className="field--row">
@@ -411,11 +438,14 @@ export function TemplateEditor({ templateId, onBack }: TemplateEditorProps) {
                       </div>
                     </section>
 
-                    {cover.elements.length > 0 && (
+                    {cover.elements.length > 0 && !selectedEl && (
                       <section className="pane__section">
                         <span className="label pane__title">
                           elementos ({cover.elements.length})
                         </span>
+                        <p className="hint" style={{ marginBottom: 8 }}>
+                          Clique num elemento para editá-lo.
+                        </p>
                         <div className="stack">
                           {cover.elements.map((el, i) => {
                             const desc =
@@ -441,55 +471,21 @@ export function TemplateEditor({ templateId, onBack }: TemplateEditorProps) {
                         </div>
                       </section>
                     )}
+
+                    {selectedEl && (
+                      <CoverElementInspector
+                        el={selectedEl}
+                        index={coverSelected!}
+                        pageHeightMm={pageH}
+                        onChange={(next) => updateCoverElement(coverSelected!, next)}
+                        onRemove={() => removeCoverElement(coverSelected!)}
+                        onUploadImage={api.uploadAsset}
+                        assetUrl={assetUrl}
+                      />
+                    )}
                   </>
                 )}
-              </aside>
-
-              {/* Coluna central: a folha da capa (mesma estrutura do Editor tab) */}
-              <main className="bench">
-                {cover.enabled ? (
-                  <div className="bench__stage">
-                    <CoverEditor
-                      template={template}
-                      onElementChange={updateCoverElement}
-                      selected={coverSelected}
-                      onSelect={setCoverSelected}
-                      variables={{}}
-                      assets={assets}
-                    />
-                  </div>
-                ) : (
-                  <p className="bench__hint">
-                    Habilite a capa no painel à esquerda para começar a editá-la.
-                  </p>
-                )}
-              </main>
-
-              {/* Coluna direita: inspector do elemento selecionado */}
-              {cover.enabled && selectedEl ? (
-                <aside className="pane pane--right">
-                  <CoverElementInspector
-                    el={selectedEl}
-                    index={coverSelected!}
-                    pageHeightMm={pageH}
-                    onChange={(next) => updateCoverElement(coverSelected!, next)}
-                    onRemove={() => removeCoverElement(coverSelected!)}
-                    onUploadImage={api.uploadAsset}
-                    assetUrl={assetUrl}
-                  />
-                </aside>
-              ) : (
-                <aside className="pane pane--right">
-                  <section className="pane__section">
-                    <span className="label pane__title">inspetor</span>
-                    <p className="hint">
-                      {cover.enabled
-                        ? 'Clique num elemento para editá-lo.'
-                        : 'Habilite a capa para começar.'}
-                    </p>
-                  </section>
-                </aside>
-              )}
+              </div>
             </div>
           );
         })()}

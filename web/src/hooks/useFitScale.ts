@@ -34,6 +34,7 @@ interface FitOptions {
 export function useFitScale(contentWidthPx: number, options: FitOptions = {}) {
   const { padding = 0, paddingY = 0, max = 1, contentHeightPx, override } = options;
   const ref = useRef<HTMLDivElement>(null);
+  const rafHandles = useRef<number[]>([]);
   const [scale, setScale] = useState(override ?? 0);
 
   useLayoutEffect(() => {
@@ -55,15 +56,32 @@ export function useFitScale(contentWidthPx: number, options: FitOptions = {}) {
         const height = box.clientHeight - paddingY;
         if (height > 0) next = Math.min(next, height / contentHeightPx);
       }
-      setScale(Math.min(max, next));
+      // Garante que o zoom fit sempre produz algo visível. Cai para a
+      // fração mínima do ZoomBar (0.25) caso a medida ainda esteja em zero.
+      const safe = next > 0 ? Math.min(max, next) : 0.25;
+      setScale(safe);
     };
 
     const observer = new ResizeObserver(measure);
     observer.observe(node);
     if (box !== node) observer.observe(box);
+    // Medida inicial + duas re-medidas via rAF para pegar layouts que só
+    // estabilizam depois do primeiro paint (troca de aba, mount recente).
     measure();
+    const raf1 = requestAnimationFrame(() => {
+      measure();
+      // Segundo tick — necessário quando uma transição CSS ainda está
+      // resolvendo dimensões do container.
+      const raf2 = requestAnimationFrame(measure);
+      rafHandles.current.push(raf2);
+    });
+    rafHandles.current.push(raf1);
 
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      rafHandles.current.forEach(cancelAnimationFrame);
+      rafHandles.current = [];
+    };
   }, [contentWidthPx, contentHeightPx, padding, paddingY, max, override]);
 
   return { ref, scale };
