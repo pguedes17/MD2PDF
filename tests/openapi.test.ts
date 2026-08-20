@@ -29,7 +29,8 @@ function makeTemplate(overrides: Partial<Template> = {}): Template {
     },
     cover: {
       enabled: false,
-      applyHeaderFooter: false,
+      applyHeader: false,
+      applyFooter: false,
       elements: [],
     },
     ...overrides,
@@ -299,11 +300,12 @@ describe('buildTemplateOpenApi', () => {
     }
   });
 
-  it('cover expõe enabled, applyHeaderFooter e elements (array)', () => {
+  it('cover expõe enabled, applyHeader, applyFooter e elements (array)', () => {
     const spec = buildTemplateOpenApi(makeTemplate()) as any;
     const cover = spec.components.schemas.Template.properties.cover;
     expect(cover.properties.enabled.type).toBe('boolean');
-    expect(cover.properties.applyHeaderFooter.type).toBe('boolean');
+    expect(cover.properties.applyHeader.type).toBe('boolean');
+    expect(cover.properties.applyFooter.type).toBe('boolean');
     expect(cover.properties.elements.type).toBe('array');
   });
 });

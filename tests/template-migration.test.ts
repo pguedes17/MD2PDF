@@ -66,7 +66,7 @@ describe('migrateTemplateJson', () => {
       header: { heightMm: 20, elements: [{ type: 'text', value: 'x', align: 'left', xOffsetMm: 0, yMm: 0 }] },
       footer: { heightMm: 0, elements: [] },
       body: { font: { family: 'system-ui' }, fontSizePt: 11, color: '#111111', lineHeight: 1.5 },
-      cover: { enabled: false, applyHeaderFooter: false, elements: [] },
+      cover: { enabled: false, applyHeader: false, applyFooter: false, elements: [] },
       headings: {
         h1: { color: '#111111', bold: true, fontSizePt: 20 },
         h2: { color: '#111111', bold: true, fontSizePt: 16 },
@@ -90,7 +90,7 @@ describe('migrateTemplateJson', () => {
       header: { heightMm: 20, zones: { left: [], center: [], right: [{ type: 'text', value: 'D' }] } },
       footer: { heightMm: 0, elements: [] },
       body: { font: { family: 'system-ui' } },
-      cover: { enabled: false, applyHeaderFooter: false, elements: [] },
+      cover: { enabled: false, applyHeader: false, applyFooter: false, elements: [] },
       headings: {
         h1: { color: '#111111', bold: true, fontSizePt: 20 },
         h2: { color: '#111111', bold: true, fontSizePt: 16 },
@@ -128,8 +128,29 @@ describe('migrateTemplateJson', () => {
     expect(t.version).toBe(2);
     expect(t.body.font.family).toBe("Arial, sans-serif");
     expect(t.body).not.toHaveProperty('fontFamily');
-    expect(t.cover).toEqual({ enabled: false, applyHeaderFooter: false, elements: [] });
+    expect(t.cover).toEqual({ enabled: false, applyHeader: false, applyFooter: false, elements: [] });
     expect(t.headings.h1).toEqual({ color: '#111111', bold: true, fontSizePt: 20 });
+  });
+
+  it('divide cover.applyHeaderFooter em applyHeader + applyFooter', () => {
+    const v2WithOldField = {
+      version: 2, name: 'Y',
+      page: { format: 'A4', orientation: 'portrait', margins: { top: 30, right: 20, bottom: 25, left: 20 } },
+      header: { heightMm: 20, elements: [] }, footer: { heightMm: 15, elements: [] },
+      body: { font: { family: 'X' }, fontSizePt: 11, color: '#111', lineHeight: 1.5 },
+      cover: { enabled: true, applyHeaderFooter: true, elements: [] },
+      headings: {
+        h1: { color: '#111', bold: true, fontSizePt: 20 },
+        h2: { color: '#111', bold: true, fontSizePt: 16 },
+        h3: { color: '#111', bold: true, fontSizePt: 13 },
+      },
+    };
+    const { data, changed } = migrateTemplateJson(v2WithOldField);
+    expect(changed).toBe(true);
+    const t = data as any;
+    expect(t.cover.applyHeader).toBe(true);
+    expect(t.cover.applyFooter).toBe(true);
+    expect(t.cover).not.toHaveProperty('applyHeaderFooter');
   });
 
   it('template já v2 passa incólume', () => {
@@ -138,7 +159,7 @@ describe('migrateTemplateJson', () => {
       page: { format: 'A4', orientation: 'portrait', margins: { top: 30, right: 20, bottom: 25, left: 20 } },
       header: { heightMm: 20, elements: [] }, footer: { heightMm: 15, elements: [] },
       body: { font: { family: 'X' }, fontSizePt: 11, color: '#111', lineHeight: 1.5 },
-      cover: { enabled: false, applyHeaderFooter: false, elements: [] },
+      cover: { enabled: false, applyHeader: false, applyFooter: false, elements: [] },
       headings: {
         h1: { color: '#111', bold: true, fontSizePt: 20 },
         h2: { color: '#111', bold: true, fontSizePt: 16 },

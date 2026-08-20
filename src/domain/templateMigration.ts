@@ -54,6 +54,21 @@ function migrateBody(body: Record<string, unknown>): Record<string, unknown> {
   return { ...rest, font: { family } };
 }
 
+function coverNeedsSplit(cover: unknown): boolean {
+  return isObject(cover) && 'applyHeaderFooter' in cover;
+}
+
+/** Divide o antigo `applyHeaderFooter` (booleano único) nos dois novos flags. */
+function splitCoverBands(cover: Record<string, unknown>): Record<string, unknown> {
+  const { applyHeaderFooter, ...rest } = cover as { applyHeaderFooter?: unknown } & Record<string, unknown>;
+  const both = applyHeaderFooter === true;
+  return {
+    ...rest,
+    applyHeader: rest.applyHeader ?? both,
+    applyFooter: rest.applyFooter ?? both,
+  };
+}
+
 function needsV1toV2(raw: Record<string, unknown>): boolean {
   const isV1 = raw.version === 1 || raw.version === undefined;
   const missingSection =
@@ -67,7 +82,7 @@ function migrateV1toV2(raw: Record<string, unknown>): Record<string, unknown> {
     next.body = migrateBody(raw.body as Record<string, unknown>);
   }
   if (!('cover' in raw)) {
-    next.cover = { enabled: false, applyHeaderFooter: false, elements: [] };
+    next.cover = { enabled: false, applyHeader: false, applyFooter: false, elements: [] };
   }
   if (!('headings' in raw)) {
     next.headings = {
@@ -100,6 +115,13 @@ export function migrateTemplateJson(raw: unknown): { data: unknown; changed: boo
   // v1 → v2 (body.font, cover, headings)
   if (needsV1toV2(current)) {
     current = migrateV1toV2(current);
+    changed = true;
+  }
+
+  // v2 antigo: cover.applyHeaderFooter (single) → applyHeader + applyFooter.
+  // Não muda o `version` — é uma normalização interna do shape de v2.
+  if (coverNeedsSplit(current.cover)) {
+    current = { ...current, cover: splitCoverBands(current.cover as Record<string, unknown>) };
     changed = true;
   }
 

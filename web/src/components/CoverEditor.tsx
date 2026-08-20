@@ -1,18 +1,19 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { TemplateCoverElement, TemplateElement, TemplateInput } from '@shared/domain/template.js';
 import { PAGE_SIZES_MM } from '@shared/domain/template.js';
 import { elementInnerHtml, elementPosition } from '@shared/render/template.js';
 import { MM_TO_PX, mm, useFitScale } from '../hooks/useFitScale.js';
 import { SNAP_ANCHOR_MM } from '../lib/templateModel.js';
-import { api, assetUrl } from '../api.js';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-interface CoverEditorProps {
+export interface CoverEditorProps {
   template: TemplateInput;
-  onChange: (patch: Partial<TemplateInput['cover']>) => void;
+  onElementChange: (index: number, next: TemplateCoverElement) => void;
+  selected: number | null;
+  onSelect: (index: number | null) => void;
   variables?: Record<string, string>;
   assets?: Record<string, string>;
 }
@@ -22,12 +23,6 @@ interface DragState {
   originClientY: number;
   originEl: TemplateCoverElement;
 }
-
-const ELEMENT_LABEL: Record<TemplateCoverElement['type'], string> = {
-  image: 'imagem',
-  text: 'texto',
-  date: 'data',
-};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -75,8 +70,6 @@ function offsetForAbsoluteX(
   }
 }
 
-/** Snap-to-anchor drag para elementos da capa: como applyDragDelta das bandas,
- *  mas sobre a folha inteira (sem descontar margens). */
 function applyCoverDragDelta(
   origin: TemplateCoverElement,
   dxScreenMm: number,
@@ -118,7 +111,7 @@ function applyCoverDragDelta(
 }
 
 // ---------------------------------------------------------------------------
-// Small visual pieces
+// Visual pieces
 // ---------------------------------------------------------------------------
 
 function Rulers({ widthMm, heightMm }: { widthMm: number; heightMm: number }) {
@@ -188,13 +181,8 @@ function SnapGuide({ align }: { align: TemplateCoverElement['align'] }) {
   return <div className="snap-guide" style={style} />;
 }
 
-/**
- * "Fantasma" das faixas de header/footer sobre a folha da capa.
- * Mostra o conteúdo do template com `pointer-events: none` para que o clique
- * atravesse até a folha (a edição das bandas fica na aba Editor). Só aparece
- * quando `cover.applyHeaderFooter=true` — dando o feedback visual imediato do
- * checkbox.
- */
+/** Fantasma das faixas do template sobre a folha da capa. Read-only:
+ *  pointer-events: none no wrapper para o click passar até `.sheet`. */
 function BandGhost({
   band,
   template,
@@ -221,7 +209,6 @@ function BandGhost({
         fontSize: '9pt',
         lineHeight: 1.2,
         pointerEvents: 'none',
-        opacity: 0.85,
       }}
     >
       <span className="band__tag">{label} · {b.heightMm}mm</span>
@@ -347,12 +334,6 @@ function CoverElementBody({
     }
   };
 
-  const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    // Impede que o click borbulhe até o .sheet e deselecione o elemento
-    // que acabamos de selecionar no pointerdown.
-    event.stopPropagation();
-  };
-
   return (
     <>
       <div
@@ -362,7 +343,7 @@ function CoverElementBody({
         onPointerMove={handleMove}
         onPointerUp={handleUp}
         onPointerCancel={handleUp}
-        onClick={handleClick}
+        onClick={(e) => e.stopPropagation()}
         dangerouslySetInnerHTML={{ __html: inner }}
       />
       {dragging && <DragBadge el={el} />}
@@ -372,8 +353,182 @@ function CoverElementBody({
 }
 
 // ---------------------------------------------------------------------------
-// Inspector (right pane)
+// Zoom bar
 // ---------------------------------------------------------------------------
+
+const ZOOM_STEP = 0.25;
+const ZOOM_MIN = 0.25;
+const ZOOM_MAX = 3;
+
+interface ZoomState {
+  mode: 'fit' | 'manual';
+  value: number;
+}
+
+function ZoomBar({
+  fitScale,
+  zoom,
+  onZoom,
+}: {
+  fitScale: number;
+  zoom: ZoomState;
+  onZoom: (next: ZoomState) => void;
+}) {
+  const current = zoom.mode === 'manual' ? zoom.value : fitScale;
+  const step = (dir: 1 | -1) => {
+    const base = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, current + dir * ZOOM_STEP));
+    onZoom({ mode: 'manual', value: base });
+  };
+  return (
+    <div className="zoom-bar" role="group" aria-label="controles de zoom">
+      <button
+        type="button"
+        className="btn btn--sm btn--ghost"
+        aria-label="diminuir zoom"
+        disabled={current <= ZOOM_MIN + 0.001}
+        onClick={() => step(-1)}
+      >
+        −
+      </button>
+      <span className="zoom-bar__value measure">{Math.round(current * 100)}%</span>
+      <button
+        type="button"
+        className="btn btn--sm btn--ghost"
+        aria-label="aumentar zoom"
+        disabled={current >= ZOOM_MAX - 0.001}
+        onClick={() => step(1)}
+      >
+        +
+      </button>
+      <button
+        type="button"
+        className={`btn btn--sm btn--ghost ${zoom.mode === 'fit' ? 'zoom-bar__fit--active' : ''}`}
+        onClick={() => onZoom({ mode: 'fit', value: fitScale })}
+        title="Ajustar a folha à janela"
+      >
+        encaixar
+      </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main component — same shape as Sheet.tsx (renders inside .bench__stage)
+// ---------------------------------------------------------------------------
+
+export function CoverEditor({
+  template,
+  onElementChange,
+  selected,
+  onSelect,
+  variables = {},
+  assets = {},
+}: CoverEditorProps) {
+  const { w: pageW, h: pageH } = pageDims(template);
+  const [zoom, setZoom] = useState<ZoomState>({ mode: 'fit', value: 1 });
+
+  const sheetWidthPx = mm(pageW);
+  const { ref, scale } = useFitScale(sheetWidthPx, {
+    padding: 64,
+    paddingY: 56,
+    contentHeightPx: mm(pageH),
+    override: zoom.mode === 'manual' ? zoom.value : undefined,
+  });
+
+  const elements = template.cover.elements;
+  const { applyHeader, applyFooter } = template.cover;
+
+  const handleWheel = useCallback(
+    (event: React.WheelEvent<HTMLDivElement>) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      setZoom((prev) => {
+        const base = prev.mode === 'manual' ? prev.value : scale;
+        const factor = event.deltaY < 0 ? 1 + ZOOM_STEP : 1 - ZOOM_STEP;
+        const next = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, base * factor));
+        return { mode: 'manual', value: Number(next.toFixed(3)) };
+      });
+    },
+    [scale],
+  );
+
+  const handleSheetClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.target === event.currentTarget) onSelect(null);
+  };
+
+  return (
+    <div
+      ref={ref}
+      className="bench__scroll"
+      style={{ width: '100%', display: 'flex', justifyContent: 'center' }}
+      onWheel={handleWheel}
+    >
+      <div
+        style={{
+          width: sheetWidthPx * scale,
+          height: mm(pageH) * scale,
+          marginTop: 20,
+        }}
+      >
+        <div className="stage" style={{ transform: `scale(${scale})`, width: `${pageW}mm` }}>
+          <div
+            className="sheet"
+            style={{ width: `${pageW}mm`, height: `${pageH}mm` }}
+            onClick={handleSheetClick}
+          >
+            <Rulers widthMm={pageW} heightMm={pageH} />
+
+            {applyHeader && (
+              <BandGhost band="header" template={template} assets={assets} variables={variables} />
+            )}
+
+            {elements.map((el, i) => (
+              <CoverElementBody
+                key={i}
+                el={el}
+                index={i}
+                selected={selected === i}
+                pageWidthMm={pageW}
+                pageHeightMm={pageH}
+                scale={scale}
+                assets={assets}
+                variables={variables}
+                onSelect={onSelect}
+                onChange={(next) => onElementChange(i, next)}
+              />
+            ))}
+
+            {applyFooter && (
+              <BandGhost band="footer" template={template} assets={assets} variables={variables} />
+            )}
+          </div>
+        </div>
+      </div>
+
+      <ZoomBar fitScale={scale} zoom={zoom} onZoom={setZoom} />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Inspector — exportado para o TemplateEditor renderizar no pane da direita
+// ---------------------------------------------------------------------------
+
+const ELEMENT_LABEL: Record<TemplateCoverElement['type'], string> = {
+  image: 'imagem',
+  text: 'texto',
+  date: 'data',
+};
+
+interface CoverInspectorProps {
+  el: TemplateCoverElement;
+  index: number;
+  pageHeightMm: number;
+  onChange: (next: TemplateCoverElement) => void;
+  onRemove: () => void;
+  onUploadImage: (file: File) => Promise<{ assetId: string }>;
+  assetUrl: (id: string) => string;
+}
 
 function TextProps({
   el,
@@ -420,9 +575,13 @@ function TextProps({
 function CoverImageProps({
   el,
   onChange,
+  onUpload,
+  assetUrl,
 }: {
   el: Extract<TemplateCoverElement, { type: 'image' }>;
   onChange: (patch: Partial<typeof el>) => void;
+  onUpload: (file: File) => Promise<{ assetId: string }>;
+  assetUrl: (id: string) => string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -432,7 +591,7 @@ function CoverImageProps({
     setUploading(true);
     setError(null);
     try {
-      const { assetId } = await api.uploadAsset(file);
+      const { assetId } = await onUpload(file);
       onChange({ assetId });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'não foi possível enviar a imagem');
@@ -489,19 +648,15 @@ function CoverImageProps({
   );
 }
 
-function CoverElementInspector({
+export function CoverElementInspector({
   el,
   index,
   pageHeightMm,
   onChange,
   onRemove,
-}: {
-  el: TemplateCoverElement;
-  index: number;
-  pageHeightMm: number;
-  onChange: (next: TemplateCoverElement) => void;
-  onRemove: () => void;
-}) {
+  onUploadImage,
+  assetUrl,
+}: CoverInspectorProps) {
   const update = (patch: Partial<TemplateCoverElement>) =>
     onChange({ ...el, ...patch } as TemplateCoverElement);
 
@@ -560,6 +715,8 @@ function CoverElementInspector({
         <CoverImageProps
           el={el}
           onChange={(patch) => update(patch as Partial<TemplateCoverElement>)}
+          onUpload={onUploadImage}
+          assetUrl={assetUrl}
         />
       )}
 
@@ -646,282 +803,31 @@ function CoverElementInspector({
 }
 
 // ---------------------------------------------------------------------------
-// Zoom bar
+// Helper para calcular a próxima posição em cascata quando um novo elemento
+// é adicionado — evita empilhamento no mesmo yMm.
 // ---------------------------------------------------------------------------
 
-const ZOOM_STEP = 0.25;
-const ZOOM_MIN = 0.25;
-const ZOOM_MAX = 3;
-
-interface ZoomState {
-  mode: 'fit' | 'manual';
-  value: number;
+export function nextCoverYMm(elements: readonly TemplateCoverElement[], pageHeightMm: number): number {
+  if (elements.length === 0) return Math.max(0, pageHeightMm / 2 - 20);
+  const bottomOfLast = elements.reduce(
+    (max, el) => Math.max(max, el.yMm + estimateElementHeight(el)),
+    0,
+  );
+  return Math.min(Math.max(0, pageHeightMm - 40), bottomOfLast + 12);
 }
 
-function ZoomBar({
-  fitScale,
-  zoom,
-  onZoom,
-}: {
-  fitScale: number;
-  zoom: ZoomState;
-  onZoom: (next: ZoomState) => void;
-}) {
-  const current = zoom.mode === 'manual' ? zoom.value : fitScale;
-  const step = (dir: 1 | -1) => {
-    const base = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, current + dir * ZOOM_STEP));
-    onZoom({ mode: 'manual', value: base });
-  };
-  return (
-    <div className="zoom-bar" role="group" aria-label="controles de zoom">
-      <button
-        type="button"
-        className="btn btn--sm btn--ghost"
-        aria-label="diminuir zoom"
-        disabled={current <= ZOOM_MIN + 0.001}
-        onClick={() => step(-1)}
-      >
-        −
-      </button>
-      <span className="zoom-bar__value measure">{Math.round(current * 100)}%</span>
-      <button
-        type="button"
-        className="btn btn--sm btn--ghost"
-        aria-label="aumentar zoom"
-        disabled={current >= ZOOM_MAX - 0.001}
-        onClick={() => step(1)}
-      >
-        +
-      </button>
-      <button
-        type="button"
-        className={`btn btn--sm btn--ghost ${zoom.mode === 'fit' ? 'zoom-bar__fit--active' : ''}`}
-        onClick={() => onZoom({ mode: 'fit', value: fitScale })}
-        title="Ajustar a folha à janela"
-      >
-        encaixar
-      </button>
-    </div>
-  );
+export function makeCoverElement(
+  type: 'text' | 'image' | 'date',
+  yMm: number,
+): TemplateCoverElement {
+  const base = { align: 'center' as const, xOffsetMm: 0, yMm };
+  if (type === 'text') {
+    return { type, value: 'Novo texto', bold: true, fontSizePt: 24, color: '#000000', ...base };
+  }
+  if (type === 'image') {
+    return { type, assetId: '', heightMm: 30, ...base };
+  }
+  return { type, format: 'dd/MM/yyyy', bold: false, fontSizePt: 11, color: '#111111', ...base };
 }
 
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
-
-export function CoverEditor({ template, onChange, variables = {}, assets = {} }: CoverEditorProps) {
-  const { w: pageW, h: pageH } = pageDims(template);
-  const [selected, setSelected] = useState<number | null>(null);
-  const [zoom, setZoom] = useState<ZoomState>({ mode: 'fit', value: 1 });
-
-  const sheetWidthPx = mm(pageW);
-  const { ref, scale } = useFitScale(sheetWidthPx, {
-    padding: 64,
-    paddingY: 56,
-    contentHeightPx: mm(pageH),
-    override: zoom.mode === 'manual' ? zoom.value : undefined,
-  });
-
-  const elements = template.cover.elements;
-  const applyHeaderFooter = template.cover.applyHeaderFooter;
-
-  const handleWheel = useCallback(
-    (event: React.WheelEvent<HTMLDivElement>) => {
-      if (!event.ctrlKey && !event.metaKey) return;
-      event.preventDefault();
-      setZoom((prev) => {
-        const base = prev.mode === 'manual' ? prev.value : scale;
-        const factor = event.deltaY < 0 ? 1 + ZOOM_STEP : 1 - ZOOM_STEP;
-        const next = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, base * factor));
-        return { mode: 'manual', value: Number(next.toFixed(3)) };
-      });
-    },
-    [scale],
-  );
-
-  function updateElement(i: number, next: TemplateCoverElement) {
-    const updated = elements.map((el, idx) => (idx === i ? next : el));
-    onChange({ elements: updated });
-  }
-
-  function removeElement(i: number) {
-    const updated = elements.filter((_, idx) => idx !== i);
-    onChange({ elements: updated });
-    setSelected(null);
-  }
-
-  /** Posição do próximo elemento adicionado — cascata a partir do último para
-   *  não empilhar tudo no mesmo ponto. */
-  const nextYMm = useMemo(() => {
-    if (elements.length === 0) return Math.max(0, pageH / 2 - 20);
-    const bottomOfLast = elements.reduce(
-      (max, el) => Math.max(max, el.yMm + estimateElementHeight(el)),
-      0,
-    );
-    const step = bottomOfLast + 12;
-    return Math.min(Math.max(0, pageH - 40), step);
-  }, [elements, pageH]);
-
-  function addElement(type: 'text' | 'image' | 'date') {
-    const base = { align: 'center' as const, xOffsetMm: 0, yMm: nextYMm };
-    let el: TemplateCoverElement;
-    if (type === 'text') {
-      el = { type, value: 'Novo texto', bold: true, fontSizePt: 24, color: '#000000', ...base };
-    } else if (type === 'image') {
-      el = { type, assetId: '', heightMm: 30, ...base };
-    } else {
-      el = { type, format: 'dd/MM/yyyy', bold: false, fontSizePt: 11, color: '#111111', ...base };
-    }
-    onChange({ elements: [...elements, el] });
-    setSelected(elements.length);
-  }
-
-  const selectedEl = selected !== null ? elements[selected] ?? null : null;
-
-  // Deseleciona só quando o click foi realmente no fundo da folha, não num
-  // elemento. O CoverElementBody stopPropagation no click; ainda assim
-  // filtramos por target === currentTarget para o caso do click cair em
-  // pseudo-elementos ou fantasmas de banda.
-  const handleSheetClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (event.target === event.currentTarget) setSelected(null);
-  };
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Toolbar de adicionar */}
-      <div
-        style={{
-          display: 'flex',
-          gap: 6,
-          padding: '8px 12px',
-          borderBottom: '1px solid var(--chrome-line)',
-          background: 'var(--chrome-2)',
-          flexShrink: 0,
-        }}
-      >
-        <span
-          className="label"
-          style={{ color: 'var(--chrome-text-2)', alignSelf: 'center', marginRight: 4 }}
-        >
-          adicionar
-        </span>
-        <button type="button" className="btn btn--sm btn--ghost" onClick={() => addElement('text')}>
-          + texto
-        </button>
-        <button type="button" className="btn btn--sm btn--ghost" onClick={() => addElement('image')}>
-          + imagem
-        </button>
-        <button type="button" className="btn btn--sm btn--ghost" onClick={() => addElement('date')}>
-          + data
-        </button>
-      </div>
-
-      {/* Área principal: canvas + inspector */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
-        {/* Canvas — mesma estrutura de bench + bench__stage do Sheet.tsx,
-            garantindo que o useFitScale meça o container certo. */}
-        <div className="bench" style={{ flex: 1, minHeight: 0 }} onWheel={handleWheel}>
-          <div ref={ref} className="bench__stage">
-            <div
-              style={{
-                width: sheetWidthPx * scale,
-                height: mm(pageH) * scale,
-                marginTop: 20,
-                flexShrink: 0,
-              }}
-            >
-              <div className="stage" style={{ transform: `scale(${scale})`, width: `${pageW}mm` }}>
-                <div
-                  className="sheet"
-                  style={{
-                    width: `${pageW}mm`,
-                    height: `${pageH}mm`,
-                    position: 'relative',
-                    overflow: 'hidden',
-                  }}
-                  onClick={handleSheetClick}
-                >
-                  <Rulers widthMm={pageW} heightMm={pageH} />
-
-                  {applyHeaderFooter && (
-                    <BandGhost band="header" template={template} assets={assets} variables={variables} />
-                  )}
-
-                  {elements.map((el, i) => (
-                    <CoverElementBody
-                      key={i}
-                      el={el}
-                      index={i}
-                      selected={selected === i}
-                      pageWidthMm={pageW}
-                      pageHeightMm={pageH}
-                      scale={scale}
-                      assets={assets}
-                      variables={variables}
-                      onSelect={setSelected}
-                      onChange={(next) => updateElement(i, next)}
-                    />
-                  ))}
-
-                  {applyHeaderFooter && (
-                    <BandGhost band="footer" template={template} assets={assets} variables={variables} />
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <ZoomBar fitScale={scale} zoom={zoom} onZoom={setZoom} />
-        </div>
-
-        {/* Inspector à direita — sempre presente (mostra hint quando nada
-            está selecionado, editor quando algo está) */}
-        <div className="pane pane--right" style={{ width: 240, overflowY: 'auto', flexShrink: 0 }}>
-          {selectedEl !== null && selected !== null ? (
-            <CoverElementInspector
-              el={selectedEl}
-              index={selected}
-              pageHeightMm={pageH}
-              onChange={(next) => updateElement(selected, next)}
-              onRemove={() => removeElement(selected)}
-            />
-          ) : (
-            <section className="pane__section">
-              <span className="label pane__title">capa</span>
-              <p className="hint">
-                {elements.length === 0
-                  ? 'Adicione elementos com os botões acima.'
-                  : 'Clique num elemento para editá-lo.'}
-              </p>
-              {elements.length > 0 && (
-                <div className="stack">
-                  {elements.map((el, i) => {
-                    const desc =
-                      el.type === 'text'
-                        ? el.value || '(vazio)'
-                        : el.type === 'date'
-                          ? el.format
-                          : el.assetId
-                            ? `${el.heightMm}mm`
-                            : 'sem imagem';
-                    return (
-                      <button
-                        key={i}
-                        type="button"
-                        className="elrow"
-                        onClick={() => setSelected(i)}
-                      >
-                        <span className="elrow__kind">{ELEMENT_LABEL[el.type]}</span>
-                        <span className="elrow__desc">{desc}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
+export { ELEMENT_LABEL };

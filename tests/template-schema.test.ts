@@ -200,14 +200,14 @@ describe('BodySchema — font', () => {
 describe('CoverSchema', () => {
   it('vem desabilitada por default', () => {
     const t = makeBlankTemplateInput();
-    expect(t.cover).toEqual({ enabled: false, applyHeaderFooter: false, elements: [] });
+    expect(t.cover).toEqual({ enabled: false, applyHeader: false, applyFooter: false, elements: [] });
   });
 
   it('aceita texto e imagem na capa com yMm até a altura da página', () => {
     const raw = makeBlankTemplateInput() as any;
     raw.cover = {
       enabled: true,
-      applyHeaderFooter: false,
+      applyHeader: false, applyFooter: false,
       elements: [
         { type: 'text', value: 'Título', align: 'center', xOffsetMm: 0, yMm: 140, fontSizePt: 32, bold: true, color: '#000' },
         { type: 'image', assetId: 'ast_abcdefghij12', heightMm: 30, align: 'center', xOffsetMm: 0, yMm: 40 },
@@ -221,7 +221,7 @@ describe('CoverSchema', () => {
     const raw = makeBlankTemplateInput() as any;
     raw.cover = {
       enabled: true,
-      applyHeaderFooter: false,
+      applyHeader: false, applyFooter: false,
       elements: [{ type: 'pageNumber', format: '{page}', align: 'center', xOffsetMm: 0, yMm: 100 }],
     };
     const res = TemplateInputSchema.safeParse(raw);
@@ -232,7 +232,7 @@ describe('CoverSchema', () => {
     const raw = makeBlankTemplateInput() as any;
     raw.cover = {
       enabled: true,
-      applyHeaderFooter: false,
+      applyHeader: false, applyFooter: false,
       // A4 portrait = 297mm; um texto grande em yMm=290 estoura.
       elements: [{ type: 'text', value: 'X', align: 'left', xOffsetMm: 0, yMm: 290, fontSizePt: 60, bold: false, color: '#000' }],
     };

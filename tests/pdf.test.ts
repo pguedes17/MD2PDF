@@ -195,7 +195,7 @@ describe('convertWithTemplate — capa', () => {
     };
     t.cover = {
       enabled: true,
-      applyHeaderFooter: false,
+      applyHeader: false, applyFooter: false,
       elements: [
         { type: 'text', value: 'MEU TITULO', align: 'center', xOffsetMm: 0, yMm: 140, fontSizePt: 32, bold: true, color: '#000' },
       ],
@@ -210,7 +210,7 @@ describe('convertWithTemplate — capa', () => {
     expect(info.textByPage[1]).toContain('CABECALHO');            // corpo tem header
   });
 
-  it('capa com applyHeaderFooter=true mantém o header também na página 1', async () => {
+  it('capa com applyHeader+applyFooter=true mantém o header também na página 1', async () => {
     const { readPdf } = await import('./helpers/readPdf.js');
     const t = makeBlankTemplateInput('Doc2') as any;
     t.header = {
@@ -221,7 +221,7 @@ describe('convertWithTemplate — capa', () => {
     };
     t.cover = {
       enabled: true,
-      applyHeaderFooter: true,
+      applyHeader: true, applyFooter: true,
       elements: [
         { type: 'text', value: 'CAPA TITULO', align: 'center', xOffsetMm: 0, yMm: 120, fontSizePt: 28, bold: true, color: '#000' },
       ],

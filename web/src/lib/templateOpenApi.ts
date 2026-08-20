@@ -192,9 +192,13 @@ export function buildTemplateOpenApi(template: Template, options: BuildOptions =
         description: 'Configuração da página de capa.',
         properties: {
           enabled: { type: 'boolean', description: 'Liga/desliga a página de capa.' },
-          applyHeaderFooter: {
+          applyHeader: {
             type: 'boolean',
-            description: 'Aplica o cabeçalho e rodapé do template na capa.',
+            description: 'Mostra o cabeçalho do template na capa.',
+          },
+          applyFooter: {
+            type: 'boolean',
+            description: 'Mostra o rodapé do template na capa.',
           },
           elements: {
             type: 'array',
@@ -202,7 +206,7 @@ export function buildTemplateOpenApi(template: Template, options: BuildOptions =
             items: coverElementSchema,
           },
         },
-        required: ['enabled', 'applyHeaderFooter', 'elements'],
+        required: ['enabled', 'applyHeader', 'applyFooter', 'elements'],
       },
     },
     required: ['id', 'name', 'page', 'header', 'footer', 'body', 'headings', 'cover'],

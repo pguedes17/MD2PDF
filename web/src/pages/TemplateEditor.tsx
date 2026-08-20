@@ -7,7 +7,14 @@ import { PageSettings } from '../components/PageSettings.js';
 import { Inspector } from '../components/Inspector.js';
 import { FontPicker } from '../components/FontPicker.js';
 import { HeadingsPanel } from '../components/HeadingsPanel.js';
-import { CoverEditor } from '../components/CoverEditor.js';
+import {
+  CoverEditor,
+  CoverElementInspector,
+  ELEMENT_LABEL as COVER_ELEMENT_LABEL,
+  makeCoverElement,
+  nextCoverYMm,
+} from '../components/CoverEditor.js';
+import { PAGE_SIZES_MM } from '@shared/domain/template.js';
 import { collectAssetIds, type Selection } from '../lib/templateModel.js';
 
 interface TemplateEditorProps {
@@ -41,6 +48,7 @@ export function TemplateEditor({ templateId, onBack }: TemplateEditorProps) {
   const [previewing, setPreviewing] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [activeTab, setActiveTab] = useState<EditorTab>('editor');
+  const [coverSelected, setCoverSelected] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -312,65 +320,179 @@ export function TemplateEditor({ templateId, onBack }: TemplateEditorProps) {
         )}
 
         {/* ── Tab: Capa ───────────────────────────────────────────────────── */}
-        {activeTab === 'cover' && (
-          <div className="editor editor--two-col">
-            <aside className="pane" style={{ overflowY: 'auto' }}>
-              <section className="pane__section">
-                <span className="label pane__title">capa</span>
+        {activeTab === 'cover' && (() => {
+          const cover = template.cover;
+          const pageSize = PAGE_SIZES_MM[template.page.format];
+          const pageH = template.page.orientation === 'landscape' ? pageSize.width : pageSize.height;
 
-                <label className="field--row">
-                  <input
-                    type="checkbox"
-                    checked={template.cover.enabled}
-                    onChange={(e) =>
-                      updateTemplate({ cover: { ...template.cover, enabled: e.target.checked } })
-                    }
-                  />
-                  <span>Habilitar capa</span>
-                </label>
+          const updateCover = (patch: Partial<TemplateInput['cover']>) =>
+            updateTemplate({ cover: { ...template.cover, ...patch } });
 
-                {template.cover.enabled && (
-                  <label className="field--row" style={{ marginTop: 8 }}>
+          const addCoverElement = (type: 'text' | 'image' | 'date') => {
+            const el = makeCoverElement(type, nextCoverYMm(cover.elements, pageH));
+            updateCover({ elements: [...cover.elements, el] });
+            setCoverSelected(cover.elements.length);
+          };
+
+          const updateCoverElement = (i: number, next: typeof cover.elements[number]) => {
+            updateCover({ elements: cover.elements.map((el, idx) => (idx === i ? next : el)) });
+          };
+
+          const removeCoverElement = (i: number) => {
+            updateCover({ elements: cover.elements.filter((_, idx) => idx !== i) });
+            setCoverSelected(null);
+          };
+
+          const selectedIsValid = coverSelected !== null && coverSelected < cover.elements.length;
+          const selectedEl = selectedIsValid ? cover.elements[coverSelected]! : null;
+
+          return (
+            <div className="editor">
+              {/* Coluna esquerda: toggles + adicionar + lista de elementos */}
+              <aside className="pane">
+                <section className="pane__section">
+                  <span className="label pane__title">capa</span>
+                  <label className="field--row">
                     <input
                       type="checkbox"
-                      checked={template.cover.applyHeaderFooter}
-                      onChange={(e) =>
-                        updateTemplate({
-                          cover: { ...template.cover, applyHeaderFooter: e.target.checked },
-                        })
-                      }
+                      checked={cover.enabled}
+                      onChange={(e) => updateCover({ enabled: e.target.checked })}
                     />
-                    <span>Aplicar cabeçalho e rodapé também na capa</span>
+                    <span>Habilitar capa</span>
                   </label>
-                )}
-              </section>
-            </aside>
+                </section>
 
-            <main className="bench" style={{ padding: 0, overflow: 'hidden' }}>
-              {template.cover.enabled ? (
-                <CoverEditor
-                  template={template}
-                  onChange={(patch) =>
-                    updateTemplate({ cover: { ...template.cover, ...patch } })
-                  }
-                  assets={assets}
-                  variables={{}}
-                />
+                {cover.enabled && (
+                  <>
+                    <section className="pane__section">
+                      <span className="label pane__title">bandas do template</span>
+                      <label className="field--row">
+                        <input
+                          type="checkbox"
+                          checked={cover.applyHeader}
+                          onChange={(e) => updateCover({ applyHeader: e.target.checked })}
+                        />
+                        <span>Mostrar cabeçalho na capa</span>
+                      </label>
+                      <label className="field--row" style={{ marginTop: 6 }}>
+                        <input
+                          type="checkbox"
+                          checked={cover.applyFooter}
+                          onChange={(e) => updateCover({ applyFooter: e.target.checked })}
+                        />
+                        <span>Mostrar rodapé na capa</span>
+                      </label>
+                    </section>
+
+                    <section className="pane__section">
+                      <span className="label pane__title">adicionar elemento</span>
+                      <div className="stack">
+                        <button
+                          type="button"
+                          className="btn btn--sm btn--ghost"
+                          onClick={() => addCoverElement('text')}
+                        >
+                          + texto
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn--sm btn--ghost"
+                          onClick={() => addCoverElement('image')}
+                        >
+                          + imagem
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn--sm btn--ghost"
+                          onClick={() => addCoverElement('date')}
+                        >
+                          + data
+                        </button>
+                      </div>
+                    </section>
+
+                    {cover.elements.length > 0 && (
+                      <section className="pane__section">
+                        <span className="label pane__title">
+                          elementos ({cover.elements.length})
+                        </span>
+                        <div className="stack">
+                          {cover.elements.map((el, i) => {
+                            const desc =
+                              el.type === 'text'
+                                ? el.value || '(vazio)'
+                                : el.type === 'date'
+                                  ? el.format
+                                  : el.assetId
+                                    ? `${el.heightMm}mm`
+                                    : 'sem imagem';
+                            return (
+                              <button
+                                key={i}
+                                type="button"
+                                className={`elrow ${coverSelected === i ? 'elrow--selected' : ''}`}
+                                onClick={() => setCoverSelected(i)}
+                              >
+                                <span className="elrow__kind">{COVER_ELEMENT_LABEL[el.type]}</span>
+                                <span className="elrow__desc">{desc}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </section>
+                    )}
+                  </>
+                )}
+              </aside>
+
+              {/* Coluna central: a folha da capa (mesma estrutura do Editor tab) */}
+              <main className="bench">
+                {cover.enabled ? (
+                  <div className="bench__stage">
+                    <CoverEditor
+                      template={template}
+                      onElementChange={updateCoverElement}
+                      selected={coverSelected}
+                      onSelect={setCoverSelected}
+                      variables={{}}
+                      assets={assets}
+                    />
+                  </div>
+                ) : (
+                  <p className="bench__hint">
+                    Habilite a capa no painel à esquerda para começar a editá-la.
+                  </p>
+                )}
+              </main>
+
+              {/* Coluna direita: inspector do elemento selecionado */}
+              {cover.enabled && selectedEl ? (
+                <aside className="pane pane--right">
+                  <CoverElementInspector
+                    el={selectedEl}
+                    index={coverSelected!}
+                    pageHeightMm={pageH}
+                    onChange={(next) => updateCoverElement(coverSelected!, next)}
+                    onRemove={() => removeCoverElement(coverSelected!)}
+                    onUploadImage={api.uploadAsset}
+                    assetUrl={assetUrl}
+                  />
+                </aside>
               ) : (
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    height: '100%',
-                  }}
-                >
-                  <p className="hint">Habilite a capa no painel à esquerda para começar a editá-la.</p>
-                </div>
+                <aside className="pane pane--right">
+                  <section className="pane__section">
+                    <span className="label pane__title">inspetor</span>
+                    <p className="hint">
+                      {cover.enabled
+                        ? 'Clique num elemento para editá-lo.'
+                        : 'Habilite a capa para começar.'}
+                    </p>
+                  </section>
+                </aside>
               )}
-            </main>
-          </div>
-        )}
+            </div>
+          );
+        })()}
 
         {/* ── Tab: Tipografia ─────────────────────────────────────────────── */}
         {activeTab === 'typography' && (

@@ -360,11 +360,11 @@ describe('renderTemplate — @font-face', () => {
     expect(r.css).toContain("format('truetype')");
   });
 
-  it('@font-face também aparece no CSS da capa quando applyHeaderFooter=false', () => {
+  it('@font-face também aparece no CSS da capa (modo externo)', () => {
     const t = makeBlankTemplateInput() as any;
     t.body.font = { family: 'MinhaFonte', customFontId: 'fnt_abcdefghij12' };
     t.cover = {
-      enabled: true, applyHeaderFooter: false,
+      enabled: true, applyHeader: false, applyFooter: false,
       elements: [{ type: 'text', value: 'Capa', align: 'center', xOffsetMm: 0, yMm: 100, fontSizePt: 24, bold: true, color: '#000' }],
     };
     const r = renderTemplate(t, { fontDataUri: 'data:font/ttf;base64,AAAA' });
@@ -380,10 +380,10 @@ describe('renderTemplate — cover', () => {
     expect(r.coverInlineHtml).toBeUndefined();
   });
 
-  it('emite cover como documento separado quando applyHeaderFooter=false', () => {
+  it('emite cover como documento separado quando applyHeader=applyFooter=false', () => {
     const t = makeBlankTemplateInput() as any;
     t.cover = {
-      enabled: true, applyHeaderFooter: false,
+      enabled: true, applyHeader: false, applyFooter: false,
       elements: [{ type: 'text', value: 'Título', align: 'center', xOffsetMm: 0, yMm: 130, fontSizePt: 28, bold: true, color: '#000' }],
     };
     const r = renderTemplate(t);
@@ -395,10 +395,10 @@ describe('renderTemplate — cover', () => {
     expect(r.coverInlineHtml).toBeUndefined();
   });
 
-  it('emite coverInlineHtml quando applyHeaderFooter=true', () => {
+  it('emite coverInlineHtml quando applyHeader=applyFooter=true', () => {
     const t = makeBlankTemplateInput() as any;
     t.cover = {
-      enabled: true, applyHeaderFooter: true,
+      enabled: true, applyHeader: true, applyFooter: true,
       elements: [{ type: 'text', value: 'Título', align: 'center', xOffsetMm: 0, yMm: 100, fontSizePt: 24, bold: true, color: '#000' }],
     };
     const r = renderTemplate(t);
@@ -411,7 +411,7 @@ describe('renderTemplate — cover', () => {
   it('resolve variáveis nos textos da capa', () => {
     const t = makeBlankTemplateInput() as any;
     t.cover = {
-      enabled: true, applyHeaderFooter: false,
+      enabled: true, applyHeader: false, applyFooter: false,
       elements: [{ type: 'text', value: 'Contrato {{numero}}', align: 'center', xOffsetMm: 0, yMm: 100, fontSizePt: 22, bold: true, color: '#000' }],
     };
     const r = renderTemplate(t, { variables: { numero: '2026/0413' } });

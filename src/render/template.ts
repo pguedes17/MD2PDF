@@ -306,9 +306,51 @@ hr { border: none; border-top: 1px solid #d8d8d8; margin: 1.2em 0; }
 `.trim();
 }
 
+/** Renderiza uma banda (header/footer) como overlay dentro da folha da capa.
+ *  Usado no caminho externo, quando UMA das bandas está ligada mas a outra
+ *  não — o Chromium não sabe fazer isso via `displayHeaderFooter`. Não inclui
+ *  o número de página (não faz sentido na capa). */
+function coverBandOverlay(
+  band: 'header' | 'footer',
+  template: TemplateInput,
+  opts: RenderTemplateOptions,
+): string {
+  const b = template[band];
+  if (b.heightMm <= 0) return '';
+  const { margins } = template.page;
+
+  const inner = b.elements
+    .filter((el) => el.type !== 'pageNumber')
+    .map((el) => {
+      const wrapperStyle = `position: absolute; ${positionInlineStyle(el)};`;
+      return `<div style="${wrapperStyle}">${elementInnerHtml(el, opts)}</div>`;
+    })
+    .join('');
+
+  const outerStyle = [
+    'position: absolute',
+    'left: 0',
+    'right: 0',
+    band === 'header' ? 'top: 0' : 'bottom: 0',
+    `height: ${b.heightMm}mm`,
+    `padding: 0 ${margins.right}mm 0 ${margins.left}mm`,
+    'box-sizing: border-box',
+    `font-family: ${template.body.font.family}`,
+    'font-size: 9pt',
+    'line-height: 1.2',
+    '-webkit-print-color-adjust: exact',
+    'print-color-adjust: exact',
+  ].join('; ');
+
+  const innerStyle = `position: absolute; top: 0; bottom: 0; left: ${margins.left}mm; right: ${margins.right}mm;`;
+  return `<div style="${outerStyle}"><div style="${innerStyle}">${inner}</div></div>`;
+}
+
 function coverBodyHtml(
   template: TemplateInput,
   opts: RenderTemplateOptions,
+  /** Se true, prefixar/sufixar overlays de banda dentro da folha da capa. */
+  includeBandOverlays = false,
 ): string {
   const pageW = template.page.orientation === 'landscape'
     ? PAGE_SIZES_MM[template.page.format].height
@@ -317,10 +359,17 @@ function coverBodyHtml(
     ? PAGE_SIZES_MM[template.page.format].width
     : PAGE_SIZES_MM[template.page.format].height;
 
-  const inner = template.cover.elements.map((el) => {
+  const elements = template.cover.elements.map((el) => {
     const wrapperStyle = `position: absolute; ${positionInlineStyle(el as TemplateElement)};`;
     return `<div style="${wrapperStyle}">${elementInnerHtml(el as TemplateElement, opts)}</div>`;
   }).join('');
+
+  const headerOverlay = includeBandOverlays && template.cover.applyHeader
+    ? coverBandOverlay('header', template, opts)
+    : '';
+  const footerOverlay = includeBandOverlays && template.cover.applyFooter
+    ? coverBandOverlay('footer', template, opts)
+    : '';
 
   const style = [
     'position: relative',
@@ -329,16 +378,17 @@ function coverBodyHtml(
     `height: ${pageH}mm`,
     'overflow: hidden',
   ].join('; ');
-  return `<div class="cover-page" style="${style}">${inner}</div>`;
+  return `<div class="cover-page" style="${style}">${headerOverlay}${elements}${footerOverlay}</div>`;
 }
 
 function coverDocumentHtml(
   template: TemplateInput,
   opts: RenderTemplateOptions,
 ): string {
+  // No caminho externo, bandas viram overlays dentro da folha da capa.
   return buildDocumentHtml({
     css: buildCss(template, opts),
-    bodyHtml: coverBodyHtml(template, opts),
+    bodyHtml: coverBodyHtml(template, opts, true),
   });
 }
 
@@ -353,8 +403,14 @@ export function renderTemplate(
   let coverInline: string | undefined;
 
   if (cover.enabled) {
-    if (cover.applyHeaderFooter) {
-      coverInline = `${coverBodyHtml(template as TemplateInput, opts)}<div class="page-break"></div>`;
+    // Se as DUAS bandas devem aparecer na capa, é mais barato inlinar a capa
+    // no bodyHtml — o Chromium desenha header+footer nativamente em todas as
+    // páginas (inclusive a capa). Caso contrário (uma banda, nenhuma, ou
+    // banda "só header"/"só footer"), a capa vira PDF externo com overlays
+    // desenhados manualmente na folha e ambas as bandas nativas ficam
+    // desligadas na capa.
+    if (cover.applyHeader && cover.applyFooter) {
+      coverInline = `${coverBodyHtml(template as TemplateInput, opts, false)}<div class="page-break"></div>`;
     } else {
       coverExternal = {
         html: coverDocumentHtml(template as TemplateInput, opts),

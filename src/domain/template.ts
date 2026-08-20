@@ -91,7 +91,10 @@ export const CoverElementSchema = z.discriminatedUnion('type', [
 
 export const CoverSchema = z.object({
   enabled: z.boolean().default(false),
-  applyHeaderFooter: z.boolean().default(false),
+  /** Mostrar o cabeçalho do template na capa (independente do rodapé). */
+  applyHeader: z.boolean().default(false),
+  /** Mostrar o rodapé do template na capa (independente do cabeçalho). */
+  applyFooter: z.boolean().default(false),
   elements: z.array(CoverElementSchema).default([]),
 });
 
@@ -216,9 +219,10 @@ function pageHeightMm(t: TemplateBase): number {
 function checkCoverFits(t: TemplateBase, ctx: z.RefinementCtx): void {
   if (!t.cover.enabled) return;
   const pageH = pageHeightMm(t);
-  const availableH = t.cover.applyHeaderFooter
-    ? pageH - t.page.margins.top - t.page.margins.bottom
-    : pageH;
+  // Área útil considerando apenas as bandas que aparecem na capa.
+  const topReserve = t.cover.applyHeader ? t.page.margins.top : 0;
+  const bottomReserve = t.cover.applyFooter ? t.page.margins.bottom : 0;
+  const availableH = pageH - topReserve - bottomReserve;
   t.cover.elements.forEach((el, i) => {
     const h = estimatedCoverElementHeightMm(el);
     if (el.yMm + h > availableH + 0.001) {
