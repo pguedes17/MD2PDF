@@ -5,6 +5,9 @@ import { Brand } from '../components/Logo.js';
 import { Sheet } from '../components/Sheet.js';
 import { PageSettings } from '../components/PageSettings.js';
 import { Inspector } from '../components/Inspector.js';
+import { FontPicker } from '../components/FontPicker.js';
+import { HeadingsPanel } from '../components/HeadingsPanel.js';
+import { CoverEditor } from '../components/CoverEditor.js';
 import { collectAssetIds, type Selection } from '../lib/templateModel.js';
 
 interface TemplateEditorProps {
@@ -16,6 +19,8 @@ interface Flash {
   message: string;
   tone: 'ok' | 'warn';
 }
+
+type EditorTab = 'editor' | 'cover' | 'typography';
 
 /** Só o que o servidor aceita em PUT — id e timestamps ficam com ele. */
 function toInput(template: Template): TemplateInput {
@@ -35,6 +40,7 @@ export function TemplateEditor({ templateId, onBack }: TemplateEditorProps) {
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [activeTab, setActiveTab] = useState<EditorTab>('editor');
 
   useEffect(() => {
     let cancelled = false;
@@ -59,6 +65,12 @@ export function TemplateEditor({ templateId, onBack }: TemplateEditorProps) {
   function edit(next: TemplateInput) {
     setTemplate(next);
     setDirty(true);
+  }
+
+  /** Shallow-merge a patch into the current template. */
+  function updateTemplate(patch: Partial<TemplateInput>) {
+    if (!template) return;
+    edit({ ...template, ...patch });
   }
 
   const assets = useMemo(() => {
@@ -216,49 +228,185 @@ export function TemplateEditor({ templateId, onBack }: TemplateEditorProps) {
         </div>
       </header>
 
-      <div className="editor">
-        <aside className="pane">
-          <PageSettings template={template} templateId={templateId} onChange={edit} />
-        </aside>
-
-        <main className="bench">
-          {blocked && (
-            <div className="notice notice--warn">
-              {issues.map((issue) => (
-                <div key={issue.path}>
-                  <code className="code">{issue.path}</code> — {issue.message}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* a folha mede este container, não a bancada: assim um aviso acima
-              dela reduz a escala em vez de empurrar o rodapé para fora */}
-          <div className="bench__stage">
-            <Sheet
-              template={template}
-              assets={assets}
-              selection={selection}
-              onSelect={setSelection}
-              onElementChange={(band, index, next) =>
-                edit({
-                  ...template,
-                  [band]: {
-                    ...template[band],
-                    elements: template[band].elements.map((e, i) => (i === index ? next : e)),
-                  },
-                })
-              }
-            />
-          </div>
-
-          {!selection && (
-            <p className="bench__hint">clique numa zona do cabeçalho ou do rodapé para editar</p>
-          )}
-        </main>
-
-        <Inspector template={template} selection={selection} onChange={edit} onSelect={setSelection} />
+      {/* Tab bar */}
+      <div className="editor-tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'editor'}
+          className={`editor-tabs__tab ${activeTab === 'editor' ? 'editor-tabs__tab--active' : ''}`}
+          onClick={() => setActiveTab('editor')}
+        >
+          Editor
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'cover'}
+          className={`editor-tabs__tab ${activeTab === 'cover' ? 'editor-tabs__tab--active' : ''}`}
+          onClick={() => setActiveTab('cover')}
+        >
+          Capa
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'typography'}
+          className={`editor-tabs__tab ${activeTab === 'typography' ? 'editor-tabs__tab--active' : ''}`}
+          onClick={() => setActiveTab('typography')}
+        >
+          Tipografia
+        </button>
       </div>
+
+      {/* Validation banner — visible on all tabs */}
+      {blocked && (
+        <div className="notice notice--warn" style={{ margin: '0 16px 0' }}>
+          {issues.map((issue) => (
+            <div key={issue.path}>
+              <code className="code">{issue.path}</code> — {issue.message}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Tab: Editor ─────────────────────────────────────────────────── */}
+      {activeTab === 'editor' && (
+        <div className="editor">
+          <aside className="pane">
+            <PageSettings template={template} templateId={templateId} onChange={edit} />
+          </aside>
+
+          <main className="bench">
+            {/* a folha mede este container, não a bancada: assim um aviso acima
+                dela reduz a escala em vez de empurrar o rodapé para fora */}
+            <div className="bench__stage">
+              <Sheet
+                template={template}
+                assets={assets}
+                selection={selection}
+                onSelect={setSelection}
+                onElementChange={(band, index, next) =>
+                  edit({
+                    ...template,
+                    [band]: {
+                      ...template[band],
+                      elements: template[band].elements.map((e, i) => (i === index ? next : e)),
+                    },
+                  })
+                }
+              />
+            </div>
+
+            {!selection && (
+              <p className="bench__hint">clique numa zona do cabeçalho ou do rodapé para editar</p>
+            )}
+          </main>
+
+          <Inspector template={template} selection={selection} onChange={edit} onSelect={setSelection} />
+        </div>
+      )}
+
+      {/* ── Tab: Capa ───────────────────────────────────────────────────── */}
+      {activeTab === 'cover' && (
+        <div className="editor">
+          <aside className="pane" style={{ overflowY: 'auto' }}>
+            <section className="pane__section">
+              <span className="label pane__title">capa</span>
+
+              <label className="field--row">
+                <input
+                  type="checkbox"
+                  checked={template.cover.enabled}
+                  onChange={(e) =>
+                    updateTemplate({ cover: { ...template.cover, enabled: e.target.checked } })
+                  }
+                />
+                <span>Habilitar capa</span>
+              </label>
+
+              {template.cover.enabled && (
+                <label className="field--row" style={{ marginTop: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={template.cover.applyHeaderFooter}
+                    onChange={(e) =>
+                      updateTemplate({
+                        cover: { ...template.cover, applyHeaderFooter: e.target.checked },
+                      })
+                    }
+                  />
+                  <span>Aplicar cabeçalho e rodapé também na capa</span>
+                </label>
+              )}
+            </section>
+          </aside>
+
+          <main className="bench" style={{ padding: 0, overflow: 'hidden' }}>
+            {template.cover.enabled ? (
+              <CoverEditor
+                template={template}
+                onChange={(patch) =>
+                  updateTemplate({ cover: { ...template.cover, ...patch } })
+                }
+                assets={assets}
+              />
+            ) : (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%',
+                }}
+              >
+                <p className="hint">Habilite a capa no painel à esquerda para começar a editá-la.</p>
+              </div>
+            )}
+          </main>
+        </div>
+      )}
+
+      {/* ── Tab: Tipografia ─────────────────────────────────────────────── */}
+      {activeTab === 'typography' && (
+        <div className="editor">
+          <aside className="pane" style={{ overflowY: 'auto' }}>
+            <section className="pane__section">
+              <span className="label pane__title">fonte do corpo</span>
+              <FontPicker
+                value={template.body.font}
+                onChange={(next) =>
+                  updateTemplate({ body: { ...template.body, font: next } })
+                }
+              />
+            </section>
+
+            <section className="pane__section">
+              <span className="label pane__title">estilos de títulos</span>
+              <HeadingsPanel
+                value={template.headings}
+                onChange={(next) => updateTemplate({ headings: next })}
+              />
+            </section>
+          </aside>
+
+          <main className="bench">
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%',
+              }}
+            >
+              <p className="hint">
+                As configurações de tipografia afetam o corpo do documento e os títulos gerados
+                a partir do Markdown.
+              </p>
+            </div>
+          </main>
+        </div>
+      )}
     </>
   );
 }

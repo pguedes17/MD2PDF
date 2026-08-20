@@ -723,10 +723,42 @@ button {
 
 /* ══ editor ══════════════════════════════════════════════════════════════ */
 
+.editor-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 6px 12px 0;
+  background: var(--chrome);
+  border-bottom: 1px solid var(--chrome-line);
+  flex-shrink: 0;
+}
+
+.editor-tabs__tab {
+  padding: 6px 16px;
+  border: none;
+  background: transparent;
+  color: var(--chrome-text-2);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: var(--r-sm) var(--r-sm) 0 0;
+  transition: color 0.12s, background 0.12s;
+}
+
+.editor-tabs__tab:hover {
+  color: var(--chrome-text);
+  background: var(--chrome-3);
+}
+
+.editor-tabs__tab--active {
+  color: var(--chrome-text);
+  background: var(--chrome-2);
+  border-bottom: 2px solid var(--accent-bright);
+}
+
 .editor {
   display: grid;
   grid-template-columns: 268px minmax(0, 1fr) 296px;
-  height: calc(100% - 54px);
+  height: calc(100% - 54px - 40px);
   background: var(--chrome-2);
 }
 
