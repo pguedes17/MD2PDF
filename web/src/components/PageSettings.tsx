@@ -104,7 +104,7 @@ function VariablesSection({
       {
         ...template,
         id: templateId,
-        version: 1,
+        version: 2,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       },

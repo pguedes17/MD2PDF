@@ -116,3 +116,40 @@ export const api = {
 };
 
 export const assetUrl = (assetId: string) => `/api/assets/${assetId}`;
+
+// ── Fonts ────────────────────────────────────────────────────────────────────
+
+export interface FontMeta {
+  fontId: string;
+  family: string;
+  filename: string;
+  size: number;
+  createdAt: string;
+}
+
+export async function listFonts(): Promise<FontMeta[]> {
+  const res = await fetch('/api/fonts');
+  if (!res.ok) throw new Error(`listFonts: ${res.status}`);
+  return res.json() as Promise<FontMeta[]>;
+}
+
+export async function uploadFont(file: File, family: string): Promise<{ fontId: string; family: string }> {
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('family', family);
+  const res = await fetch('/api/fonts', { method: 'POST', body: fd });
+  if (!res.ok) throw new Error(`uploadFont: ${res.status}`);
+  return res.json() as Promise<{ fontId: string; family: string }>;
+}
+
+export async function fetchFontDataUri(id: string): Promise<string> {
+  const res = await fetch(`/api/fonts/${id}/data-uri`);
+  if (!res.ok) throw new Error(`fetchFontDataUri: ${res.status}`);
+  const body = await res.json() as { dataUri: string };
+  return body.dataUri;
+}
+
+export async function deleteFont(id: string): Promise<void> {
+  const res = await fetch(`/api/fonts/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`deleteFont: ${res.status}`);
+}
