@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { TemplateCoverElement, TemplateElement, TemplateInput } from '@shared/domain/template.js';
 import { PAGE_SIZES_MM } from '@shared/domain/template.js';
 import { elementInnerHtml, elementPosition } from '@shared/render/template.js';
@@ -23,6 +23,12 @@ interface DragState {
   originEl: TemplateCoverElement;
 }
 
+const ELEMENT_LABEL: Record<TemplateCoverElement['type'], string> = {
+  image: 'imagem',
+  text: 'texto',
+  date: 'data',
+};
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -37,51 +43,6 @@ function pageDims(t: TemplateInput): { w: number; h: number } {
 function estimateElementHeight(el: TemplateCoverElement): number {
   if (el.type === 'image') return el.heightMm;
   return el.fontSizePt * 0.353 * 1.2;
-}
-
-/**
- * Snap-to-anchor drag for cover elements. Mirrors applyDragDelta from
- * templateModel.ts but works with the full page width (no margins subtracted).
- */
-function applyCoverDragDelta(
-  origin: TemplateCoverElement,
-  dxScreenMm: number,
-  dyMm: number,
-  pageWidthMm: number,
-  pageHeightMm: number,
-): TemplateCoverElement {
-  const maxY = Math.max(0, pageHeightMm - estimateElementHeight(origin));
-  const yMm = Math.max(0, Math.min(maxY, origin.yMm + dyMm));
-
-  // Absolute X position on full-page canvas (left = 0).
-  const absoluteXMm = anchorAbsoluteX(origin.align, origin.xOffsetMm, pageWidthMm) + dxScreenMm;
-  const clamped = Math.max(0, Math.min(pageWidthMm, absoluteXMm));
-
-  const distToLeft = clamped;
-  const distToCenter = Math.abs(clamped - pageWidthMm / 2);
-  const distToRight = pageWidthMm - clamped;
-
-  let align = origin.align;
-  let xOffsetMm: number;
-
-  if (distToLeft <= SNAP_ANCHOR_MM && distToLeft <= distToCenter && distToLeft <= distToRight) {
-    align = 'left';
-    xOffsetMm = 0;
-  } else if (
-    distToRight <= SNAP_ANCHOR_MM &&
-    distToRight <= distToLeft &&
-    distToRight <= distToCenter
-  ) {
-    align = 'right';
-    xOffsetMm = 0;
-  } else if (distToCenter <= SNAP_ANCHOR_MM) {
-    align = 'center';
-    xOffsetMm = 0;
-  } else {
-    xOffsetMm = offsetForAbsoluteX(align, clamped, pageWidthMm);
-  }
-
-  return { ...origin, align, xOffsetMm, yMm } as TemplateCoverElement;
 }
 
 function anchorAbsoluteX(
@@ -114,9 +75,85 @@ function offsetForAbsoluteX(
   }
 }
 
+/** Snap-to-anchor drag para elementos da capa: como applyDragDelta das bandas,
+ *  mas sobre a folha inteira (sem descontar margens). */
+function applyCoverDragDelta(
+  origin: TemplateCoverElement,
+  dxScreenMm: number,
+  dyMm: number,
+  pageWidthMm: number,
+  pageHeightMm: number,
+): TemplateCoverElement {
+  const maxY = Math.max(0, pageHeightMm - estimateElementHeight(origin));
+  const yMm = Math.max(0, Math.min(maxY, origin.yMm + dyMm));
+
+  const absoluteXMm = anchorAbsoluteX(origin.align, origin.xOffsetMm, pageWidthMm) + dxScreenMm;
+  const clamped = Math.max(0, Math.min(pageWidthMm, absoluteXMm));
+
+  const distToLeft = clamped;
+  const distToCenter = Math.abs(clamped - pageWidthMm / 2);
+  const distToRight = pageWidthMm - clamped;
+
+  let align = origin.align;
+  let xOffsetMm: number;
+
+  if (distToLeft <= SNAP_ANCHOR_MM && distToLeft <= distToCenter && distToLeft <= distToRight) {
+    align = 'left';
+    xOffsetMm = 0;
+  } else if (
+    distToRight <= SNAP_ANCHOR_MM &&
+    distToRight <= distToLeft &&
+    distToRight <= distToCenter
+  ) {
+    align = 'right';
+    xOffsetMm = 0;
+  } else if (distToCenter <= SNAP_ANCHOR_MM) {
+    align = 'center';
+    xOffsetMm = 0;
+  } else {
+    xOffsetMm = offsetForAbsoluteX(align, clamped, pageWidthMm);
+  }
+
+  return { ...origin, align, xOffsetMm, yMm } as TemplateCoverElement;
+}
+
 // ---------------------------------------------------------------------------
-// Sub-components
+// Small visual pieces
 // ---------------------------------------------------------------------------
+
+function Rulers({ widthMm, heightMm }: { widthMm: number; heightMm: number }) {
+  const ticks = (total: number) =>
+    Array.from({ length: Math.floor(total / 10) + 1 }, (_, i) => i * 10);
+
+  return (
+    <>
+      <div className="ruler ruler--top" aria-hidden="true">
+        {ticks(widthMm).map((value) => (
+          <span key={value}>
+            <i
+              className="ruler__tick"
+              style={{ left: `${value}mm`, bottom: 0, width: 1, height: value % 50 === 0 ? 7 : 3 }}
+            />
+            {value % 50 === 0 && (
+              <em className="ruler__num" style={{ left: `${value}mm`, top: 0 }}>
+                {value}
+              </em>
+            )}
+          </span>
+        ))}
+      </div>
+      <div className="ruler ruler--left" aria-hidden="true">
+        {ticks(heightMm).map((value) => (
+          <i
+            key={value}
+            className="ruler__tick"
+            style={{ top: `${value}mm`, right: 0, height: 1, width: value % 50 === 0 ? 7 : 3 }}
+          />
+        ))}
+      </div>
+    </>
+  );
+}
 
 function DragBadge({ el }: { el: TemplateCoverElement }) {
   const style: React.CSSProperties = {
@@ -149,6 +186,79 @@ function SnapGuide({ align }: { align: TemplateCoverElement['align'] }) {
         : { left: '50%' }),
   };
   return <div className="snap-guide" style={style} />;
+}
+
+/**
+ * "Fantasma" das faixas de header/footer sobre a folha da capa.
+ * Mostra o conteúdo do template com `pointer-events: none` para que o clique
+ * atravesse até a folha (a edição das bandas fica na aba Editor). Só aparece
+ * quando `cover.applyHeaderFooter=true` — dando o feedback visual imediato do
+ * checkbox.
+ */
+function BandGhost({
+  band,
+  template,
+  assets,
+  variables,
+}: {
+  band: 'header' | 'footer';
+  template: TemplateInput;
+  assets: Record<string, string>;
+  variables: Record<string, string>;
+}) {
+  const b = template[band];
+  if (b.heightMm <= 0) return null;
+  const { margins } = template.page;
+  const label = band === 'header' ? 'cabeçalho (do template)' : 'rodapé (do template)';
+
+  return (
+    <div
+      className={`band band--${band}`}
+      style={{
+        height: `${b.heightMm}mm`,
+        padding: `0 ${margins.right}mm 0 ${margins.left}mm`,
+        fontFamily: template.body.font.family,
+        fontSize: '9pt',
+        lineHeight: 1.2,
+        pointerEvents: 'none',
+        opacity: 0.85,
+      }}
+    >
+      <span className="band__tag">{label} · {b.heightMm}mm</span>
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          bottom: 0,
+          left: `${margins.left}mm`,
+          right: `${margins.right}mm`,
+        }}
+      >
+        {b.elements.map((el, i) => {
+          const pos = elementPosition(el);
+          let inner = '';
+          try {
+            inner = elementInnerHtml(el, { assets, variables, missingAsset: 'placeholder' });
+          } catch {
+            inner = '';
+          }
+          return (
+            <div
+              key={i}
+              style={{
+                position: 'absolute',
+                top: pos.top,
+                left: pos.left,
+                right: pos.right,
+                transform: pos.transform,
+              }}
+              dangerouslySetInnerHTML={{ __html: inner }}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function CoverElementBody({
@@ -233,8 +343,14 @@ function CoverElementBody({
     try {
       (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
     } catch {
-      // pointer already released
+      /* pointer already released */
     }
+  };
+
+  const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    // Impede que o click borbulhe até o .sheet e deselecione o elemento
+    // que acabamos de selecionar no pointerdown.
+    event.stopPropagation();
   };
 
   return (
@@ -246,6 +362,7 @@ function CoverElementBody({
         onPointerMove={handleMove}
         onPointerUp={handleUp}
         onPointerCancel={handleUp}
+        onClick={handleClick}
         dangerouslySetInnerHTML={{ __html: inner }}
       />
       {dragging && <DragBadge el={el} />}
@@ -255,7 +372,7 @@ function CoverElementBody({
 }
 
 // ---------------------------------------------------------------------------
-// Inspector panel for selected cover element
+// Inspector (right pane)
 // ---------------------------------------------------------------------------
 
 function TextProps({
@@ -398,19 +515,12 @@ function CoverElementInspector({
   const shortcutBottom = () =>
     update({ yMm: Math.max(0, pageHeightMm - estimateElementHeight(el) - 10) });
 
-  const ELEMENT_LABEL: Record<TemplateCoverElement['type'], string> = {
-    image: 'imagem',
-    text: 'texto',
-    date: 'data',
-  };
-
   return (
     <section className="pane__section">
       <span className="label pane__title">
         elemento {index + 1} · {ELEMENT_LABEL[el.type]}
       </span>
 
-      {/* Type-specific fields */}
       {el.type === 'text' && (
         <>
           <label className="field">
@@ -434,9 +544,7 @@ function CoverElementInspector({
             <span className="label">formato</span>
             <select
               value={el.format}
-              onChange={(e) =>
-                update({ format: e.target.value as typeof el.format })
-              }
+              onChange={(e) => update({ format: e.target.value as typeof el.format })}
             >
               <option value="dd/MM/yyyy">31/12/2026</option>
               <option value="yyyy-MM-dd">2026-12-31</option>
@@ -455,11 +563,9 @@ function CoverElementInspector({
         />
       )}
 
-      {/* Position section */}
       <div style={{ marginTop: 14 }}>
         <span className="label pane__title">posição</span>
 
-        {/* Align shortcuts */}
         <div className="align-shortcut" role="group" aria-label="alinhamento horizontal">
           <button
             type="button"
@@ -487,35 +593,18 @@ function CoverElementInspector({
           </button>
         </div>
 
-        {/* Vertical shortcuts */}
         <div className="align-shortcut" role="group" aria-label="posição vertical" style={{ marginTop: 6 }}>
-          <button
-            type="button"
-            className="btn btn--sm btn--ghost"
-            onClick={shortcutTop}
-            title="y = 0mm"
-          >
+          <button type="button" className="btn btn--sm btn--ghost" onClick={shortcutTop} title="y = 0mm">
             Topo
           </button>
-          <button
-            type="button"
-            className="btn btn--sm btn--ghost"
-            onClick={shortcutMiddle}
-            title="Centraliza verticalmente na página"
-          >
+          <button type="button" className="btn btn--sm btn--ghost" onClick={shortcutMiddle} title="Centraliza verticalmente na página">
             Meio
           </button>
-          <button
-            type="button"
-            className="btn btn--sm btn--ghost"
-            onClick={shortcutBottom}
-            title="10mm acima do rodapé da página"
-          >
-            Rodapé da capa
+          <button type="button" className="btn btn--sm btn--ghost" onClick={shortcutBottom} title="10mm acima do rodapé da página">
+            Rodapé
           </button>
         </div>
 
-        {/* Numeric inputs */}
         <div className="grid-2" style={{ marginTop: 10 }}>
           <label className="field">
             <span className="label">x offset (mm)</span>
@@ -540,13 +629,8 @@ function CoverElementInspector({
           </label>
         </div>
 
-        {/* Horizontal center shortcut */}
         <div style={{ marginTop: 6 }}>
-          <button
-            type="button"
-            className="btn btn--sm btn--ghost"
-            onClick={shortcutCenter}
-          >
+          <button type="button" className="btn btn--sm btn--ghost" onClick={shortcutCenter}>
             Centralizar horizontal
           </button>
         </div>
@@ -562,7 +646,7 @@ function CoverElementInspector({
 }
 
 // ---------------------------------------------------------------------------
-// ZoomBar (reused pattern from Sheet.tsx)
+// Zoom bar
 // ---------------------------------------------------------------------------
 
 const ZOOM_STEP = 0.25;
@@ -639,8 +723,8 @@ export function CoverEditor({ template, onChange, variables = {}, assets = {} }:
   });
 
   const elements = template.cover.elements;
+  const applyHeaderFooter = template.cover.applyHeaderFooter;
 
-  // Ctrl+wheel zoom, same as Sheet.tsx
   const handleWheel = useCallback(
     (event: React.WheelEvent<HTMLDivElement>) => {
       if (!event.ctrlKey && !event.metaKey) return;
@@ -666,8 +750,20 @@ export function CoverEditor({ template, onChange, variables = {}, assets = {} }:
     setSelected(null);
   }
 
+  /** Posição do próximo elemento adicionado — cascata a partir do último para
+   *  não empilhar tudo no mesmo ponto. */
+  const nextYMm = useMemo(() => {
+    if (elements.length === 0) return Math.max(0, pageH / 2 - 20);
+    const bottomOfLast = elements.reduce(
+      (max, el) => Math.max(max, el.yMm + estimateElementHeight(el)),
+      0,
+    );
+    const step = bottomOfLast + 12;
+    return Math.min(Math.max(0, pageH - 40), step);
+  }, [elements, pageH]);
+
   function addElement(type: 'text' | 'image' | 'date') {
-    const base = { align: 'center' as const, xOffsetMm: 0, yMm: 50 };
+    const base = { align: 'center' as const, xOffsetMm: 0, yMm: nextYMm };
     let el: TemplateCoverElement;
     if (type === 'text') {
       el = { type, value: 'Novo texto', bold: true, fontSizePt: 24, color: '#000000', ...base };
@@ -682,9 +778,17 @@ export function CoverEditor({ template, onChange, variables = {}, assets = {} }:
 
   const selectedEl = selected !== null ? elements[selected] ?? null : null;
 
+  // Deseleciona só quando o click foi realmente no fundo da folha, não num
+  // elemento. O CoverElementBody stopPropagation no click; ainda assim
+  // filtramos por target === currentTarget para o caso do click cair em
+  // pseudo-elementos ou fantasmas de banda.
+  const handleSheetClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.target === event.currentTarget) setSelected(null);
+  };
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 0 }}>
-      {/* Toolbar */}
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* Toolbar de adicionar */}
       <div
         style={{
           display: 'flex',
@@ -695,7 +799,10 @@ export function CoverEditor({ template, onChange, variables = {}, assets = {} }:
           flexShrink: 0,
         }}
       >
-        <span className="label" style={{ color: 'var(--chrome-text-2)', alignSelf: 'center', marginRight: 4 }}>
+        <span
+          className="label"
+          style={{ color: 'var(--chrome-text-2)', alignSelf: 'center', marginRight: 4 }}
+        >
           adicionar
         </span>
         <button type="button" className="btn btn--sm btn--ghost" onClick={() => addElement('text')}>
@@ -709,53 +816,57 @@ export function CoverEditor({ template, onChange, variables = {}, assets = {} }:
         </button>
       </div>
 
-      {/* Main area: canvas + inspector */}
+      {/* Área principal: canvas + inspector */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
-        {/* Canvas */}
-        <div
-          ref={ref}
-          className="bench__scroll"
-          style={{ flex: 1, overflow: 'auto', display: 'flex', justifyContent: 'center' }}
-          onWheel={handleWheel}
-          onClick={() => setSelected(null)}
-        >
-          <div
-            style={{
-              width: sheetWidthPx * scale,
-              height: mm(pageH) * scale,
-              marginTop: 20,
-              flexShrink: 0,
-            }}
-          >
+        {/* Canvas — mesma estrutura de bench + bench__stage do Sheet.tsx,
+            garantindo que o useFitScale meça o container certo. */}
+        <div className="bench" style={{ flex: 1, minHeight: 0 }} onWheel={handleWheel}>
+          <div ref={ref} className="bench__stage">
             <div
-              className="stage"
-              style={{ transform: `scale(${scale})`, width: `${pageW}mm` }}
+              style={{
+                width: sheetWidthPx * scale,
+                height: mm(pageH) * scale,
+                marginTop: 20,
+                flexShrink: 0,
+              }}
             >
-              <div
-                className="sheet"
-                style={{
-                  width: `${pageW}mm`,
-                  height: `${pageH}mm`,
-                  position: 'relative',
-                  overflow: 'hidden',
-                  background: '#fff',
-                }}
-              >
-                {elements.map((el, i) => (
-                  <CoverElementBody
-                    key={i}
-                    el={el}
-                    index={i}
-                    selected={selected === i}
-                    pageWidthMm={pageW}
-                    pageHeightMm={pageH}
-                    scale={scale}
-                    assets={assets}
-                    variables={variables}
-                    onSelect={setSelected}
-                    onChange={(next) => updateElement(i, next)}
-                  />
-                ))}
+              <div className="stage" style={{ transform: `scale(${scale})`, width: `${pageW}mm` }}>
+                <div
+                  className="sheet"
+                  style={{
+                    width: `${pageW}mm`,
+                    height: `${pageH}mm`,
+                    position: 'relative',
+                    overflow: 'hidden',
+                  }}
+                  onClick={handleSheetClick}
+                >
+                  <Rulers widthMm={pageW} heightMm={pageH} />
+
+                  {applyHeaderFooter && (
+                    <BandGhost band="header" template={template} assets={assets} variables={variables} />
+                  )}
+
+                  {elements.map((el, i) => (
+                    <CoverElementBody
+                      key={i}
+                      el={el}
+                      index={i}
+                      selected={selected === i}
+                      pageWidthMm={pageW}
+                      pageHeightMm={pageH}
+                      scale={scale}
+                      assets={assets}
+                      variables={variables}
+                      onSelect={setSelected}
+                      onChange={(next) => updateElement(i, next)}
+                    />
+                  ))}
+
+                  {applyHeaderFooter && (
+                    <BandGhost band="footer" template={template} assets={assets} variables={variables} />
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -763,13 +874,10 @@ export function CoverEditor({ template, onChange, variables = {}, assets = {} }:
           <ZoomBar fitScale={scale} zoom={zoom} onZoom={setZoom} />
         </div>
 
-        {/* Inspector */}
-        {selectedEl !== null && selected !== null && (
-          <div
-            className="pane pane--right"
-            style={{ width: 240, overflowY: 'auto', flexShrink: 0 }}
-            onClick={(e) => e.stopPropagation()}
-          >
+        {/* Inspector à direita — sempre presente (mostra hint quando nada
+            está selecionado, editor quando algo está) */}
+        <div className="pane pane--right" style={{ width: 240, overflowY: 'auto', flexShrink: 0 }}>
+          {selectedEl !== null && selected !== null ? (
             <CoverElementInspector
               el={selectedEl}
               index={selected}
@@ -777,52 +885,42 @@ export function CoverEditor({ template, onChange, variables = {}, assets = {} }:
               onChange={(next) => updateElement(selected, next)}
               onRemove={() => removeElement(selected)}
             />
-          </div>
-        )}
-
-        {selectedEl === null && (
-          <div
-            className="pane pane--right"
-            style={{ width: 240, overflowY: 'auto', flexShrink: 0 }}
-          >
-            <span className="label pane__title">capa</span>
-            <p className="hint">
-              {elements.length === 0
-                ? 'Adicione elementos com os botões acima.'
-                : 'Clique num elemento para editá-lo.'}
-            </p>
-            {elements.length > 0 && (
-              <div className="stack">
-                {elements.map((el, i) => {
-                  const ELEMENT_LABEL: Record<TemplateCoverElement['type'], string> = {
-                    image: 'imagem',
-                    text: 'texto',
-                    date: 'data',
-                  };
-                  const desc =
-                    el.type === 'text'
-                      ? el.value || '(vazio)'
-                      : el.type === 'date'
-                        ? el.format
-                        : el.assetId
-                          ? `${el.heightMm}mm`
-                          : 'sem imagem';
-                  return (
-                    <button
-                      key={i}
-                      type="button"
-                      className="elrow"
-                      onClick={() => setSelected(i)}
-                    >
-                      <span className="elrow__kind">{ELEMENT_LABEL[el.type]}</span>
-                      <span className="elrow__desc">{desc}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
+          ) : (
+            <section className="pane__section">
+              <span className="label pane__title">capa</span>
+              <p className="hint">
+                {elements.length === 0
+                  ? 'Adicione elementos com os botões acima.'
+                  : 'Clique num elemento para editá-lo.'}
+              </p>
+              {elements.length > 0 && (
+                <div className="stack">
+                  {elements.map((el, i) => {
+                    const desc =
+                      el.type === 'text'
+                        ? el.value || '(vazio)'
+                        : el.type === 'date'
+                          ? el.format
+                          : el.assetId
+                            ? `${el.heightMm}mm`
+                            : 'sem imagem';
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        className="elrow"
+                        onClick={() => setSelected(i)}
+                      >
+                        <span className="elrow__kind">{ELEMENT_LABEL[el.type]}</span>
+                        <span className="elrow__desc">{desc}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          )}
+        </div>
       </div>
     </div>
   );
