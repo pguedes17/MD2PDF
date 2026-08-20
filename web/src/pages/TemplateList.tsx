@@ -5,6 +5,7 @@ import { Brand, LogoMark } from '../components/Logo.js';
 import { SheetThumb } from '../components/SheetThumb.js';
 import { Icon } from '../components/Icon.js';
 import { buildTemplateOpenApi } from '../lib/templateOpenApi.js';
+import { buildImportOpenApi } from '../lib/importOpenApi.js';
 
 interface TemplateListProps {
   onOpen: (id: string) => void;
@@ -37,6 +38,7 @@ export function TemplateList({ onOpen, onConvert }: TemplateListProps) {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [copiedOpenApi, setCopiedOpenApi] = useState<string | null>(null);
+  const [copiedImportOpenApi, setCopiedImportOpenApi] = useState(false);
   const [creating, setCreating] = useState(false);
   const [importing, setImporting] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -98,6 +100,13 @@ export function TemplateList({ onOpen, onConvert }: TemplateListProps) {
     setTimeout(() => setCopiedOpenApi(null), 1800);
   }
 
+  async function copyImportOpenApi() {
+    const doc = buildImportOpenApi({ serverUrl: window.location.origin });
+    await navigator.clipboard.writeText(JSON.stringify(doc, null, 2));
+    setCopiedImportOpenApi(true);
+    setTimeout(() => setCopiedImportOpenApi(false), 1800);
+  }
+
   async function importBundle(file: File) {
     setImporting(true);
     setError(null);
@@ -143,6 +152,15 @@ export function TemplateList({ onOpen, onConvert }: TemplateListProps) {
             event.target.value = '';
           }}
         />
+        <button
+          type="button"
+          className={`btn btn--sm btn--ghost ${copiedImportOpenApi ? 'btn--icon--ok' : ''}`}
+          title={copiedImportOpenApi ? 'OpenAPI copiado!' : 'OpenAPI global: importar docx + converter com qualquer template'}
+          onClick={() => void copyImportOpenApi()}
+        >
+          <Icon name={copiedImportOpenApi ? 'check' : 'braces'} />
+          {copiedImportOpenApi ? 'Copiado!' : 'Copiar OpenAPI (Word)'}
+        </button>
         <button
           type="button"
           className="btn btn--sm btn--ghost"
