@@ -755,11 +755,26 @@ button {
   border-bottom: 2px solid var(--accent-bright);
 }
 
+/* wrapper: tab-bar + optional banner + active editor panel */
+.editor-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .editor {
   display: grid;
   grid-template-columns: 268px minmax(0, 1fr) 296px;
-  height: calc(100% - 54px - 40px);
+  flex: 1;
+  min-height: 0;
   background: var(--chrome-2);
+}
+
+/* Cover and Typography tabs only have 2 columns — no Inspector on the right */
+.editor--two-col {
+  grid-template-columns: 268px minmax(0, 1fr);
 }
 
 .pane {
@@ -1419,7 +1434,6 @@ button {
 
   .editor {
     grid-template-columns: 240px minmax(0, 1fr);
-    height: auto;
   }
 
   .pane--right {

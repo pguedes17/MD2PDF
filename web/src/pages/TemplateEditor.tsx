@@ -171,7 +171,7 @@ export function TemplateEditor({ templateId, onBack }: TemplateEditorProps) {
   }
 
   return (
-    <>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <header className="topbar on-dark">
         <Brand />
         <span className="topbar__divider" />
@@ -228,130 +228,173 @@ export function TemplateEditor({ templateId, onBack }: TemplateEditorProps) {
         </div>
       </header>
 
-      {/* Tab bar */}
-      <div className="editor-tabs" role="tablist">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'editor'}
-          className={`editor-tabs__tab ${activeTab === 'editor' ? 'editor-tabs__tab--active' : ''}`}
-          onClick={() => setActiveTab('editor')}
-        >
-          Editor
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'cover'}
-          className={`editor-tabs__tab ${activeTab === 'cover' ? 'editor-tabs__tab--active' : ''}`}
-          onClick={() => setActiveTab('cover')}
-        >
-          Capa
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'typography'}
-          className={`editor-tabs__tab ${activeTab === 'typography' ? 'editor-tabs__tab--active' : ''}`}
-          onClick={() => setActiveTab('typography')}
-        >
-          Tipografia
-        </button>
-      </div>
-
-      {/* Validation banner — visible on all tabs */}
-      {blocked && (
-        <div className="notice notice--warn" style={{ margin: '0 16px 0' }}>
-          {issues.map((issue) => (
-            <div key={issue.path}>
-              <code className="code">{issue.path}</code> — {issue.message}
-            </div>
-          ))}
+      {/* Tab bar + banner + panels — flex-column so the banner never pushes
+          the editor off-screen; the active .editor panel takes the rest. */}
+      <div className="editor-body">
+        {/* Tab bar */}
+        <div className="editor-tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'editor'}
+            className={`editor-tabs__tab ${activeTab === 'editor' ? 'editor-tabs__tab--active' : ''}`}
+            onClick={() => setActiveTab('editor')}
+          >
+            Editor
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'cover'}
+            className={`editor-tabs__tab ${activeTab === 'cover' ? 'editor-tabs__tab--active' : ''}`}
+            onClick={() => setActiveTab('cover')}
+          >
+            Capa
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'typography'}
+            className={`editor-tabs__tab ${activeTab === 'typography' ? 'editor-tabs__tab--active' : ''}`}
+            onClick={() => setActiveTab('typography')}
+          >
+            Tipografia
+          </button>
         </div>
-      )}
 
-      {/* ── Tab: Editor ─────────────────────────────────────────────────── */}
-      {activeTab === 'editor' && (
-        <div className="editor">
-          <aside className="pane">
-            <PageSettings template={template} templateId={templateId} onChange={edit} />
-          </aside>
+        {/* Validation banner — visible on all tabs, shrinks flex but doesn't
+            push the grid below the viewport */}
+        {blocked && (
+          <div className="notice notice--warn" style={{ margin: '0 16px 0', flexShrink: 0 }}>
+            {issues.map((issue) => (
+              <div key={issue.path}>
+                <code className="code">{issue.path}</code> — {issue.message}
+              </div>
+            ))}
+          </div>
+        )}
 
-          <main className="bench">
-            {/* a folha mede este container, não a bancada: assim um aviso acima
-                dela reduz a escala em vez de empurrar o rodapé para fora */}
-            <div className="bench__stage">
-              <Sheet
-                template={template}
-                assets={assets}
-                selection={selection}
-                onSelect={setSelection}
-                onElementChange={(band, index, next) =>
-                  edit({
-                    ...template,
-                    [band]: {
-                      ...template[band],
-                      elements: template[band].elements.map((e, i) => (i === index ? next : e)),
-                    },
-                  })
-                }
-              />
-            </div>
+        {/* ── Tab: Editor ─────────────────────────────────────────────────── */}
+        {activeTab === 'editor' && (
+          <div className="editor">
+            <aside className="pane">
+              <PageSettings template={template} templateId={templateId} onChange={edit} />
+            </aside>
 
-            {!selection && (
-              <p className="bench__hint">clique numa zona do cabeçalho ou do rodapé para editar</p>
-            )}
-          </main>
-
-          <Inspector template={template} selection={selection} onChange={edit} onSelect={setSelection} />
-        </div>
-      )}
-
-      {/* ── Tab: Capa ───────────────────────────────────────────────────── */}
-      {activeTab === 'cover' && (
-        <div className="editor">
-          <aside className="pane" style={{ overflowY: 'auto' }}>
-            <section className="pane__section">
-              <span className="label pane__title">capa</span>
-
-              <label className="field--row">
-                <input
-                  type="checkbox"
-                  checked={template.cover.enabled}
-                  onChange={(e) =>
-                    updateTemplate({ cover: { ...template.cover, enabled: e.target.checked } })
+            <main className="bench">
+              {/* a folha mede este container, não a bancada: assim um aviso acima
+                  dela reduz a escala em vez de empurrar o rodapé para fora */}
+              <div className="bench__stage">
+                <Sheet
+                  template={template}
+                  assets={assets}
+                  selection={selection}
+                  onSelect={setSelection}
+                  onElementChange={(band, index, next) =>
+                    edit({
+                      ...template,
+                      [band]: {
+                        ...template[band],
+                        elements: template[band].elements.map((e, i) => (i === index ? next : e)),
+                      },
+                    })
                   }
                 />
-                <span>Habilitar capa</span>
-              </label>
+              </div>
 
-              {template.cover.enabled && (
-                <label className="field--row" style={{ marginTop: 8 }}>
+              {!selection && (
+                <p className="bench__hint">clique numa zona do cabeçalho ou do rodapé para editar</p>
+              )}
+            </main>
+
+            <Inspector template={template} selection={selection} onChange={edit} onSelect={setSelection} />
+          </div>
+        )}
+
+        {/* ── Tab: Capa ───────────────────────────────────────────────────── */}
+        {activeTab === 'cover' && (
+          <div className="editor editor--two-col">
+            <aside className="pane" style={{ overflowY: 'auto' }}>
+              <section className="pane__section">
+                <span className="label pane__title">capa</span>
+
+                <label className="field--row">
                   <input
                     type="checkbox"
-                    checked={template.cover.applyHeaderFooter}
+                    checked={template.cover.enabled}
                     onChange={(e) =>
-                      updateTemplate({
-                        cover: { ...template.cover, applyHeaderFooter: e.target.checked },
-                      })
+                      updateTemplate({ cover: { ...template.cover, enabled: e.target.checked } })
                     }
                   />
-                  <span>Aplicar cabeçalho e rodapé também na capa</span>
+                  <span>Habilitar capa</span>
                 </label>
-              )}
-            </section>
-          </aside>
 
-          <main className="bench" style={{ padding: 0, overflow: 'hidden' }}>
-            {template.cover.enabled ? (
-              <CoverEditor
-                template={template}
-                onChange={(patch) =>
-                  updateTemplate({ cover: { ...template.cover, ...patch } })
-                }
-                assets={assets}
-              />
-            ) : (
+                {template.cover.enabled && (
+                  <label className="field--row" style={{ marginTop: 8 }}>
+                    <input
+                      type="checkbox"
+                      checked={template.cover.applyHeaderFooter}
+                      onChange={(e) =>
+                        updateTemplate({
+                          cover: { ...template.cover, applyHeaderFooter: e.target.checked },
+                        })
+                      }
+                    />
+                    <span>Aplicar cabeçalho e rodapé também na capa</span>
+                  </label>
+                )}
+              </section>
+            </aside>
+
+            <main className="bench" style={{ padding: 0, overflow: 'hidden' }}>
+              {template.cover.enabled ? (
+                <CoverEditor
+                  template={template}
+                  onChange={(patch) =>
+                    updateTemplate({ cover: { ...template.cover, ...patch } })
+                  }
+                  assets={assets}
+                />
+              ) : (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    height: '100%',
+                  }}
+                >
+                  <p className="hint">Habilite a capa no painel à esquerda para começar a editá-la.</p>
+                </div>
+              )}
+            </main>
+          </div>
+        )}
+
+        {/* ── Tab: Tipografia ─────────────────────────────────────────────── */}
+        {activeTab === 'typography' && (
+          <div className="editor editor--two-col">
+            <aside className="pane" style={{ overflowY: 'auto' }}>
+              <section className="pane__section">
+                <span className="label pane__title">fonte do corpo</span>
+                <FontPicker
+                  value={template.body.font}
+                  onChange={(next) =>
+                    updateTemplate({ body: { ...template.body, font: next } })
+                  }
+                />
+              </section>
+
+              <section className="pane__section">
+                <span className="label pane__title">estilos de títulos</span>
+                <HeadingsPanel
+                  value={template.headings}
+                  onChange={(next) => updateTemplate({ headings: next })}
+                />
+              </section>
+            </aside>
+
+            <main className="bench">
               <div
                 style={{
                   display: 'flex',
@@ -360,53 +403,15 @@ export function TemplateEditor({ templateId, onBack }: TemplateEditorProps) {
                   height: '100%',
                 }}
               >
-                <p className="hint">Habilite a capa no painel à esquerda para começar a editá-la.</p>
+                <p className="hint">
+                  As configurações de tipografia afetam o corpo do documento e os títulos gerados
+                  a partir do Markdown.
+                </p>
               </div>
-            )}
-          </main>
-        </div>
-      )}
-
-      {/* ── Tab: Tipografia ─────────────────────────────────────────────── */}
-      {activeTab === 'typography' && (
-        <div className="editor">
-          <aside className="pane" style={{ overflowY: 'auto' }}>
-            <section className="pane__section">
-              <span className="label pane__title">fonte do corpo</span>
-              <FontPicker
-                value={template.body.font}
-                onChange={(next) =>
-                  updateTemplate({ body: { ...template.body, font: next } })
-                }
-              />
-            </section>
-
-            <section className="pane__section">
-              <span className="label pane__title">estilos de títulos</span>
-              <HeadingsPanel
-                value={template.headings}
-                onChange={(next) => updateTemplate({ headings: next })}
-              />
-            </section>
-          </aside>
-
-          <main className="bench">
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: '100%',
-              }}
-            >
-              <p className="hint">
-                As configurações de tipografia afetam o corpo do documento e os títulos gerados
-                a partir do Markdown.
-              </p>
-            </div>
-          </main>
-        </div>
-      )}
-    </>
+            </main>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
