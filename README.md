@@ -22,6 +22,7 @@ daí uma única chamada converte qualquer Markdown com aquela identidade visual.
 - [Endpoints](#endpoints)
 - [O template](#o-template)
 - [Como está montado](#como-está-montado)
+- [Importando do Word](#importando-do-word)
 - [Segurança](#segurança)
 - [Configuração](#configuração)
 - [Testes](#testes)
@@ -242,6 +243,8 @@ Além disso o CSS gerado já cuida do que costuma sair feio:
 | `GET` | `/api/fonts` | Lista as fontes |
 | `GET` | `/api/fonts/:id` | Serve o binário da fonte |
 | `DELETE` | `/api/fonts/:id` | Remove (erro 409 se referenciada por template) |
+| `POST` | `/api/templates/analyze-docx` | Analisa um .docx e devolve os fatos + warnings, sem criar template |
+| `POST` | `/api/templates/from-docx` | Analisa um .docx e cria o template automaticamente |
 | `GET` | `/health` | Sinal de vida |
 
 Erros vêm sempre no mesmo formato:
@@ -353,6 +356,77 @@ o mesmo módulo que o servidor usa para imprimir — o preview bate com o PDF po
 | `zod` | schema e validação |
 | `react` + `vite` | editor visual |
 | `vitest` + `pdfjs-dist` | testes que abrem o PDF gerado |
+
+---
+
+## Importando do Word
+
+Quando você já tem um `.docx` com o papel timbrado da empresa, o md2pdf
+consegue extrair o template automaticamente:
+
+```bash
+curl -X POST http://localhost:3000/api/templates/from-docx?name=Bionexo \
+  -F "file=@meu-timbrado.docx"
+```
+
+A resposta traz:
+
+```json
+{
+  "template": { "id": "tpl_abc...", "name": "Bionexo", "...": "..." },
+  "warnings": [
+    { "code": "EMF_NOT_SUPPORTED", "message": "word/media/image1.emf é EMF; ..." }
+  ],
+  "assetIds": ["ast_..."]
+}
+```
+
+Guarde o `template.id` e use como qualquer template criado à mão:
+
+```bash
+curl -X POST http://localhost:3000/api/convert \
+  -H "content-type: application/json" \
+  -d '{"templateId":"tpl_abc...","markdown":"# Doc","output":"path"}'
+```
+
+### O que é importado
+
+- Formato e orientação da página (A4/Letter, portrait/landscape)
+- Margens
+- Cabeçalho e rodapé da seção default (texto, alinhamento, tipografia, logo)
+- Fonte, tamanho, cor e altura de linha do corpo (via estilo `Normal`)
+- Estilos de `Heading 1/2/3` (cor, negrito, tamanho)
+- Imagens PNG/JPG/SVG/GIF/WebP embutidas nos cabeçalhos/rodapés
+
+### O que **não** é importado
+
+- Corpo do documento (isso vem do markdown que você envia depois)
+- Tabelas de estilo, numeração automática, campos, sumário
+- Imagens EMF/WMF (não renderizam em Chromium — vira warning)
+- Capa personalizada (a heurística é conservadora; edite depois se quiser)
+
+### Usando via MCP
+
+O botão **"Copiar OpenAPI (Word)"** na lista de templates copia um spec
+OpenAPI 3.0.3 com duas operações:
+
+1. `importTemplateFromDocx` — recebe o .docx, devolve `template.id`
+2. `convertWithTemplate` — recebe `templateId` + `markdown`, devolve o path do PDF
+
+Empacotado como MCP (via qualquer ferramenta OpenAPI→MCP), habilita
+agentes (Claude, Copilot, Cursor) a fazer o fluxo completo:
+"crie um template do docx X e depois converta o markdown Y com ele".
+
+### Analisar sem persistir
+
+Se você quer inspecionar o que seria importado antes de criar o template:
+
+```bash
+curl -X POST http://localhost:3000/api/templates/analyze-docx \
+  -F "file=@meu.docx"
+```
+
+Devolve o mesmo `{ analysis, warnings }` sem criar template no disco.
 
 ---
 
