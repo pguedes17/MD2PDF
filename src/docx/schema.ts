@@ -68,8 +68,8 @@ export const DocxAnalysisSchema = z.object({
     }),
   }),
   /** Chaves possíveis: 'default', 'first', 'even'. Ausência = sem header nessa role. */
-  headers: z.record(BandSchema).default({}),
-  footers: z.record(BandSchema).default({}),
+  headers: z.record(z.string(), BandSchema).default({}),
+  footers: z.record(z.string(), BandSchema).default({}),
   styles: z.object({
     body: BodyStyleSchema,
     headings: z.object({
