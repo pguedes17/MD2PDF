@@ -55,6 +55,7 @@ export function buildImportOpenApi(options: BuildOptions = {}): object {
                         'Exemplo Windows: `C:/DEV/md2pdf/tests/fixtures/docx/bionexo-requisitos.docx`. ' +
                         'Exemplo Linux: `/home/user/docs/timbrado.docx`. ' +
                         'DEVE terminar em `.docx` e ser um caminho absoluto — caminhos relativos são rejeitados.',
+                      example: 'C:/DEV/md2pdf/tests/fixtures/docx/bionexo-requisitos.docx',
                     },
                     name: {
                       type: 'string',
@@ -74,7 +75,10 @@ export function buildImportOpenApi(options: BuildOptions = {}): object {
                       type: 'string',
                       format: 'binary',
                       description:
-                        'ALTERNATIVA para clientes que fazem upload real (browser). Agentes MCP normalmente NÃO usam essa variante — prefiram `application/json` com `docxPath`.',
+                        'ALTERNATIVA à variante JSON. Passe o CAMINHO ABSOLUTO do .docx no host onde a tool está rodando ' +
+                        '(o oas2mcp lê o arquivo do disco e monta o multipart automaticamente). ' +
+                        'NÃO passe base64 nem bytes literais — só o caminho. ' +
+                        'Para agentes MCP a variante `application/json` com `docxPath` é equivalente e um pouco mais eficiente; use-a por padrão.',
                     },
                   },
                 },
@@ -101,13 +105,29 @@ export function buildImportOpenApi(options: BuildOptions = {}): object {
                       warnings: {
                         type: 'array',
                         description:
-                          'Alertas sobre decisões automáticas (fontes não mapeadas, EMF, etc.). Mostre ao usuário.',
+                          'Alertas sobre decisões automáticas (fontes não mapeadas, EMF, cover heurístico etc.). Mostre ao usuário. ' +
+                          'O `code` é enumerado — use-o para reagir programaticamente em vez de interpretar `message`.',
                         items: {
                           type: 'object',
                           required: ['code', 'message'],
                           properties: {
-                            code: { type: 'string' },
-                            message: { type: 'string' },
+                            code: {
+                              type: 'string',
+                              enum: [
+                                'EMF_NOT_SUPPORTED',
+                                'UNKNOWN_PAGE_SIZE',
+                                'MULTIPLE_SECTIONS',
+                                'FONT_NOT_MATCHED',
+                                'POSSIBLE_COVER_IGNORED',
+                                'HEADER_HAS_TABLE_STYLE',
+                                'EVEN_PAGE_HEADER_IGNORED',
+                                'THEME_COLOR_FALLBACK',
+                              ],
+                            },
+                            message: {
+                              type: 'string',
+                              description: 'Descrição legível do aviso, útil para exibir ao usuário.',
+                            },
                           },
                         },
                       },
@@ -121,8 +141,58 @@ export function buildImportOpenApi(options: BuildOptions = {}): object {
                 },
               },
             },
-            '400': { description: 'Arquivo ausente ou docx inválido.' },
-            '413': { description: 'Docx maior que 20MB.' },
+            '400': {
+              description:
+                'Falha de validação ou leitura. Códigos possíveis: ' +
+                '`validation_failed` (payload malformado — ex.: `docxPath` faltando, relativo ou não termina em `.docx`); ' +
+                '`docx_read_failed` (o servidor não conseguiu ler o arquivo — inexistente, sem permissão, ou não é um docx válido).',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    required: ['error', 'message'],
+                    properties: {
+                      error: {
+                        type: 'string',
+                        enum: ['validation_failed', 'docx_read_failed'],
+                        description: 'Código estável do erro — use este campo, não `message`, para decidir como reagir.',
+                      },
+                      message: {
+                        type: 'string',
+                        description: 'Descrição legível do problema, para relatar ao usuário.',
+                      },
+                      issues: {
+                        type: 'array',
+                        description:
+                          'Detalhes de validação por campo (presente apenas quando o Zod rejeita o payload). ' +
+                          'Cada item aponta um path e uma razão específica.',
+                        items: { type: 'object' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            '413': {
+              description:
+                'Docx maior que 20MB. O limite é fixo — peça ao usuário um arquivo menor ou remova imagens pesadas antes de tentar de novo.',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    required: ['error', 'message'],
+                    properties: {
+                      error: {
+                        type: 'string',
+                        description:
+                          'Código do erro emitido pelo Fastify (tipicamente `FST_REQ_FILE_TOO_LARGE`).',
+                      },
+                      message: { type: 'string' },
+                    },
+                  },
+                },
+              },
+            },
           },
         },
       },

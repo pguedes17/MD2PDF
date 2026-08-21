@@ -32,7 +32,7 @@ function mapBandElements(
         value: el.value,
         align: el.align,
         xOffsetMm: 0,
-        yMm: 0,
+        yMm: el.yMm,
         bold: el.bold,
         fontSizePt: el.fontSizePt,
         color: el.color,
@@ -53,7 +53,7 @@ function mapBandElements(
         heightMm: el.heightMm,
         align: el.align,
         xOffsetMm: 0,
-        yMm: 0,
+        yMm: el.yMm,
       });
     }
   }

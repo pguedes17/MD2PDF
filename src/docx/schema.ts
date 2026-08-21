@@ -40,6 +40,9 @@ const BandTextElementSchema = z.object({
   bold: z.boolean().default(false),
   fontSizePt: z.number().default(9),
   color: hexColor.default('#444444'),
+  /** Distância do topo da faixa, em mm. Bands.ts empilha elementos da mesma zona
+   *  incrementando este cursor para evitar sobreposição. */
+  yMm: z.number().min(0).max(60).default(0),
 });
 
 const BandImageElementSchema = z.object({
@@ -47,6 +50,7 @@ const BandImageElementSchema = z.object({
   imageDocxPath: z.string(),
   align: z.enum(['left', 'center', 'right']),
   heightMm: z.number().min(1).max(40),
+  yMm: z.number().min(0).max(60).default(0),
 });
 
 export const BandElementSchema = z.discriminatedUnion('type', [

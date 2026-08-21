@@ -4,7 +4,7 @@ import { parseXml, pick, pickAll, attr } from './xml.js';
 import { extractPageSetup } from './pageSetup.js';
 import { parseTheme } from './theme.js';
 import { extractStyles } from './styles.js';
-import { extractBand } from './bands.js';
+import { extractBand, estimateBandHeightFromElements } from './bands.js';
 import { uploadDocxImages } from './images.js';
 import { mapFontsToPresets } from './fonts.js';
 import type { DocxAnalysis, Warning } from './schema.js';
@@ -45,12 +45,11 @@ function sectPrRefs(documentXml: string): {
   return { headers, footers };
 }
 
-function estimateBandHeightMm(elements: DocxAnalysis['headers'][string]['elements']): number {
+/** Altura da faixa a partir do maior cursor de zona + folga. Faixa vazia = 0. */
+function bandHeightMm(elements: DocxAnalysis['headers'][string]['elements']): number {
   if (elements.length === 0) return 0;
-  const heights = elements.map((el) =>
-    el.type === 'image' ? el.heightMm : el.fontSizePt * 0.353 * 1.2,
-  );
-  return Math.max(15, Math.ceil(Math.max(...heights) + 5));
+  // Schema aceita heightMm até 60mm — mantemos com folga de 2mm.
+  return Math.min(60, Math.max(15, Math.ceil(estimateBandHeightFromElements(elements) + 2)));
 }
 
 export async function analyzeDocx(buf: Buffer, assetRepo: AssetRepo): Promise<AnalyzeResult> {
@@ -87,7 +86,7 @@ export async function analyzeDocx(buf: Buffer, assetRepo: AssetRepo): Promise<An
     for (const el of extracted.elements) {
       if (el.type === 'image') referencedImagePaths.push(el.imageDocxPath);
     }
-    headers[ref.role] = { heightMm: estimateBandHeightMm(extracted.elements), elements: extracted.elements };
+    headers[ref.role] = { heightMm: bandHeightMm(extracted.elements), elements: extracted.elements };
   }
 
   for (const ref of refs.footers) {
@@ -102,7 +101,7 @@ export async function analyzeDocx(buf: Buffer, assetRepo: AssetRepo): Promise<An
     for (const el of extracted.elements) {
       if (el.type === 'image') referencedImagePaths.push(el.imageDocxPath);
     }
-    footers[ref.role] = { heightMm: estimateBandHeightMm(extracted.elements), elements: extracted.elements };
+    footers[ref.role] = { heightMm: bandHeightMm(extracted.elements), elements: extracted.elements };
   }
 
   const uploaded = await uploadDocxImages(archive, referencedImagePaths, assetRepo);

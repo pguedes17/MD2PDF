@@ -9,7 +9,7 @@ const base: DocxAnalysis = {
     default: {
       heightMm: 20,
       elements: [
-        { type: 'text', value: 'Cabecalho', align: 'left', bold: false, fontSizePt: 9, color: '#444444' },
+        { type: 'text', value: 'Cabecalho', align: 'left', bold: false, fontSizePt: 9, color: '#444444', yMm: 0 },
       ],
     },
   },
@@ -17,7 +17,7 @@ const base: DocxAnalysis = {
     default: {
       heightMm: 15,
       elements: [
-        { type: 'text', value: 'Rodape', align: 'right', bold: false, fontSizePt: 9, color: '#444444' },
+        { type: 'text', value: 'Rodape', align: 'right', bold: false, fontSizePt: 9, color: '#444444', yMm: 0 },
       ],
     },
   },
@@ -57,7 +57,7 @@ describe('toTemplateInput', () => {
       headers: {
         default: {
           heightMm: 20,
-          elements: [{ type: 'image', imageDocxPath: 'word/media/image2.png', align: 'left', heightMm: 12 }],
+          elements: [{ type: 'image', imageDocxPath: 'word/media/image2.png', align: 'left', heightMm: 12, yMm: 0 }],
         },
       },
       images: [{ docxPath: 'word/media/image2.png', assetId: 'ast_abcdefghijkl', mime: 'image/png' }],
@@ -75,7 +75,7 @@ describe('toTemplateInput', () => {
       headers: {
         default: {
           heightMm: 20,
-          elements: [{ type: 'image', imageDocxPath: 'word/media/orphan.png', align: 'left', heightMm: 12 }],
+          elements: [{ type: 'image', imageDocxPath: 'word/media/orphan.png', align: 'left', heightMm: 12, yMm: 0 }],
         },
       },
       images: [],

@@ -66,8 +66,8 @@ describe('extractBand', () => {
     expect(b.elements).toHaveLength(1);
   });
 
-  it('tabela 1x3 extrai células como left/center/right', () => {
-    // Cell 0: image (left), Cell 1: text (center), Cell 2: page-number-like text (right)
+  it('tabela 1x3: célula sem w:jc cai no default por índice (left/center/right)', () => {
+    // Todas as células sem jc → default derivado do índice: 0→left, 1→center, 2→right
     const xml = `<?xml version="1.0"?>
 <w:hdr xmlns:w="urn:x" xmlns:r="urn:y" xmlns:wp="urn:wp" xmlns:a="urn:a" xmlns:pic="urn:pic">
   <w:tbl>
@@ -84,31 +84,79 @@ describe('extractBand', () => {
           </w:drawing></w:r>
         </w:p>
       </w:tc>
-      <w:tc>
-        <w:p>
-          <w:pPr><w:jc w:val="right"/></w:pPr>
-          <w:r><w:t>Company Name</w:t></w:r>
-        </w:p>
-      </w:tc>
-      <w:tc>
-        <w:p>
-          <w:pPr><w:jc w:val="left"/></w:pPr>
-          <w:r><w:t>Page 1</w:t></w:r>
-        </w:p>
-      </w:tc>
+      <w:tc><w:p><w:r><w:t>Meio</w:t></w:r></w:p></w:tc>
+      <w:tc><w:p><w:r><w:t>Fim</w:t></w:r></w:p></w:tc>
     </w:tr>
   </w:tbl>
 </w:hdr>`;
     const b = extractBand(xml, { rId1: 'media/logo.png' }, emptyTheme);
     expect(b.elements).toHaveLength(3);
-    // Cell 0 → image, align forced to left
-    expect(b.elements[0]!.type).toBe('image');
     expect(b.elements[0]!.align).toBe('left');
-    // Cell 1 → text, align forced to center (index 1), overriding jc=right
-    expect(b.elements[1]!.type).toBe('text');
     expect(b.elements[1]!.align).toBe('center');
-    // Cell 2 → text, align forced to right (index 2), overriding jc=left
-    expect(b.elements[2]!.type).toBe('text');
     expect(b.elements[2]!.align).toBe('right');
+  });
+
+  it('w:jc do parágrafo tem prioridade sobre o default da célula', () => {
+    // 2 células: default seria left/right. Ambas as células têm parágrafo com jc=right —
+    // as duas devem cair em right, empilhando via yMm (não sobreposição).
+    const xml = `<?xml version="1.0"?>
+<w:hdr xmlns:w="urn:x">
+  <w:tbl>
+    <w:tr>
+      <w:tc>
+        <w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:t>Um</w:t></w:r></w:p>
+      </w:tc>
+      <w:tc>
+        <w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:t>Dois</w:t></w:r></w:p>
+      </w:tc>
+    </w:tr>
+  </w:tbl>
+</w:hdr>`;
+    const b = extractBand(xml, {}, emptyTheme);
+    expect(b.elements).toHaveLength(2);
+    expect(b.elements[0]!.align).toBe('right');
+    expect(b.elements[1]!.align).toBe('right');
+    expect(b.elements[0]!.yMm).toBe(0);
+    // Segundo elemento na mesma zona → yMm > 0 (empilhado)
+    expect(b.elements[1]!.yMm).toBeGreaterThan(0);
+  });
+
+  it('empilha múltiplos parágrafos da mesma célula por yMm crescente', () => {
+    // 3 parágrafos numa única célula, todos jc=right → mesmo align, y crescente
+    const xml = `<?xml version="1.0"?>
+<w:hdr xmlns:w="urn:x">
+  <w:tbl>
+    <w:tr>
+      <w:tc>
+        <w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:t>Linha 1</w:t></w:r></w:p>
+        <w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:t>Linha 2</w:t></w:r></w:p>
+        <w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:t>Linha 3</w:t></w:r></w:p>
+      </w:tc>
+    </w:tr>
+  </w:tbl>
+</w:hdr>`;
+    const b = extractBand(xml, {}, emptyTheme);
+    expect(b.elements).toHaveLength(3);
+    expect(b.elements[0]!.yMm).toBe(0);
+    expect(b.elements[1]!.yMm).toBeGreaterThan(b.elements[0]!.yMm);
+    expect(b.elements[2]!.yMm).toBeGreaterThan(b.elements[1]!.yMm);
+  });
+
+  it('elementos em zonas diferentes não interferem no cursor um do outro', () => {
+    // 2 elementos left + 1 center → o center começa em yMm=0 (cursor independente)
+    const xml = `<?xml version="1.0"?>
+<w:hdr xmlns:w="urn:x">
+  <w:p><w:pPr><w:jc w:val="left"/></w:pPr><w:r><w:t>L1</w:t></w:r></w:p>
+  <w:p><w:pPr><w:jc w:val="left"/></w:pPr><w:r><w:t>L2</w:t></w:r></w:p>
+  <w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:t>C1</w:t></w:r></w:p>
+</w:hdr>`;
+    const b = extractBand(xml, {}, emptyTheme);
+    expect(b.elements).toHaveLength(3);
+    expect(b.elements[0]!.align).toBe('left');
+    expect(b.elements[0]!.yMm).toBe(0);
+    expect(b.elements[1]!.align).toBe('left');
+    expect(b.elements[1]!.yMm).toBeGreaterThan(0);
+    expect(b.elements[2]!.align).toBe('center');
+    expect(b.elements[2]!.yMm).toBe(0);
   });
 });
