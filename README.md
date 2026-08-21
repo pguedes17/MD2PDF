@@ -1,40 +1,77 @@
-# MD2PDF
+<div align="center">
 
-**API que converte Markdown em PDF aplicando um template salvo** — cabeçalho, rodapé,
-margens e numeração em todas as páginas.
+# 📄 MD2PDF
 
-Você monta o papel timbrado uma vez num editor visual, copia o id dele, e a partir
-daí uma única chamada converte qualquer Markdown com aquela identidade visual.
+**API que converte Markdown em PDF aplicando um template salvo** — cabeçalho, rodapé, margens e numeração em todas as páginas.
 
----
+![Node](https://img.shields.io/badge/node-%E2%89%A522-339933?logo=node.js&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-7.x-3178C6?logo=typescript&logoColor=white)
+![Fastify](https://img.shields.io/badge/Fastify-5.x-000000?logo=fastify&logoColor=white)
+![Playwright](https://img.shields.io/badge/Chromium-Playwright-2EAD33?logo=playwright&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-vitest-6E9F18?logo=vitest&logoColor=white)
+![MCP](https://img.shields.io/badge/MCP-ready-8A2BE2)
 
-## Sumário
+Monte o papel timbrado uma vez num editor visual, copie o `id`, e a partir daí uma única chamada converte qualquer Markdown com aquela identidade visual.
 
-- [Requisitos](#requisitos)
-- [Instalação](#instalação)
-- [Rodando](#rodando)
-- [Convertendo](#convertendo)
-- [Quebra de página](#quebra-de-página)
-- [Endpoints](#endpoints)
-- [O template](#o-template)
-- [Como está montado](#como-está-montado)
-- [Importando do Word](#importando-do-word)
-- [Segurança](#segurança)
-- [Configuração](#configuração)
-- [Testes](#testes)
-- [Deploy](#deploy)
-- [Problemas comuns](#problemas-comuns)
+</div>
 
 ---
 
-## Requisitos
+## 📚 Sumário
+
+<table>
+<tr>
+<td>
+
+- [✨ Recursos](#-recursos)
+- [📋 Requisitos](#-requisitos)
+- [📦 Instalação](#-instalação)
+- [🚀 Rodando](#-rodando)
+- [🔄 Convertendo](#-convertendo)
+- [📄 Quebra de página](#-quebra-de-página)
+- [🌐 Endpoints](#-endpoints)
+
+</td>
+<td>
+
+- [🎨 O template](#-o-template)
+- [🏗️ Como está montado](#️-como-está-montado)
+- [📥 Importando do Word](#-importando-do-word)
+- [🧹 Gerenciamento de assets](#-gerenciamento-de-assets)
+- [🔒 Segurança](#-segurança)
+- [⚙️ Configuração](#️-configuração)
+- [🧪 Testes • 🐳 Deploy • 🩹 FAQ](#-testes)
+
+</td>
+</tr>
+</table>
+
+---
+
+## ✨ Recursos
+
+| | |
+|:---:|:---|
+| 🎨 | **Editor visual** — arraste/edite header, footer e capa em tempo real (WYSIWYG que bate com o PDF, porque é o mesmo código) |
+| ⚡ | **Chromium headless** — Playwright sempre vivo, com fila e timeout por conversão |
+| 📥 | **Importar `.docx`** — extrai margens, header/footer com logo, estilos de Heading e fontes automaticamente |
+| 🧩 | **Bundles portáteis** — exporte template + assets num único JSON, importe em outro ambiente |
+| 🔤 | **Fontes customizadas** — upload de `.ttf`/`.otf`, embutido no PDF via `@font-face` base64 |
+| 🖼️ | **GC de assets** — deletar template limpa imagens órfãs automaticamente; script `gc-orphan-assets.mjs` pra higienização pontual |
+| 📃 | **Capa customizável** — primeira página com layout absoluto, opcional |
+| 🔌 | **MCP-ready** — botão "Copiar OpenAPI" gera um spec único que vira ferramentas MCP em qualquer agente |
+| 🔒 | **Sem confiança no input** — HTML sanitizado, JS desligado, sem rede saindo do PDF |
+
+---
+
+## 📋 Requisitos
 
 | | Versão | Observação |
 |---|---|---|
 | **Node.js** | **22 LTS ou superior** | O projeto usa `type: module` e top-level `await`. Testado no 22.21.0 |
 | **npm** | 10 ou superior | Vem junto com o Node 22 |
 | **Chromium** | baixado automaticamente | ~300 MB, instalado pelo Playwright no `npm install` |
-| Sistema | Windows, macOS ou Linux | Em Linux servidor, veja [Deploy](#deploy) |
+| Sistema | Windows, macOS ou Linux | Em Linux servidor, veja [🐳 Deploy](#-deploy) |
 
 Confira o que você tem:
 
@@ -43,84 +80,85 @@ node --version   # precisa ser v22.x ou maior
 npm --version
 ```
 
-Se precisar instalar ou trocar de versão, use o [nvm](https://github.com/nvm-sh/nvm)
-(`nvm install 22 && nvm use 22`) ou o [nvm-windows](https://github.com/coreybutler/nvm-windows).
+> [!TIP]
+> Se precisar instalar ou trocar de versão, use o [nvm](https://github.com/nvm-sh/nvm) (`nvm install 22 && nvm use 22`) ou o [nvm-windows](https://github.com/coreybutler/nvm-windows).
 
 ---
 
-## Instalação
+## 📦 Instalação
 
 ```bash
 git clone https://github.com/pguedes17/md2pdf.git
 cd md2pdf
-
 npm install   # dependências da API e do editor + baixa o Chromium
 ```
 
-Um comando só: o `postinstall` baixa o Chromium usado para imprimir e instala as
-dependências do editor.
-São cerca de 300 MB na primeira vez. Se ele falhar (proxy, rede), rode manualmente:
+Um comando só: o `postinstall` baixa o Chromium usado para imprimir e instala as dependências do editor. São cerca de 300 MB na primeira vez.
+
+<details>
+<summary>🩹 <b>Falhou o download do Chromium?</b> (proxy, rede)</summary>
 
 ```bash
 npx playwright install chromium
 ```
 
-Nada mais precisa ser configurado: não há banco de dados. Os templates viram
-arquivos JSON e as imagens ficam em disco, dentro de `./storage`, criado sozinho
-no primeiro uso.
+</details>
+
+> [!NOTE]
+> Nada mais precisa ser configurado: **não há banco de dados**. Templates viram JSON e imagens ficam em disco, em `./storage/`, criado sozinho no primeiro uso.
 
 ---
 
-## Rodando
+## 🚀 Rodando
 
-### Desenvolvimento
-
-Dois processos, em terminais separados:
+### 🛠️ Desenvolvimento — dois processos
 
 ```bash
-npm run dev       # API em http://localhost:3000, com reload
-npm run dev:web   # editor em http://localhost:5173, com HMR
+npm run dev       # 🟢 API em http://localhost:3000, com reload
+npm run dev:web   # 🟢 editor em http://localhost:5173, com HMR
 ```
 
-Abra **http://localhost:5173**. O Vite encaminha as chamadas `/api/*` para a porta
-3000 sozinho.
+Abra **http://localhost:5173**. O Vite encaminha as chamadas `/api/*` para a porta 3000 sozinho.
 
-### Produção (um processo só)
+### 🚢 Produção — um processo só
 
 ```bash
 npm start   # compila o editor e sobe tudo em http://localhost:3000
 ```
 
-O `npm start` roda o build do editor antes de subir, e o próprio servidor serve
-os arquivos compilados — em produção é um processo e uma porta.
+O `npm start` roda o build do editor antes de subir, e o próprio servidor serve os arquivos compilados.
 
-Se preferir separar as etapas (num Dockerfile, por exemplo):
+<details>
+<summary>📜 <b>Scripts disponíveis</b></summary>
+
+| Script | O que faz |
+|--------|-----------|
+| `npm run dev` | 🟢 API com reload automático |
+| `npm start` | 🚢 Compila o editor e sobe a API servindo tudo junto |
+| `npm run dev:web` | 🎨 Editor com HMR (porta 5173) |
+| `npm run build:web` | 🏗️ Compila o editor para `web/dist` |
+| `npm run setup:web` | 📦 Instala só as dependências do editor |
+| `npm run build` | ✅ Checagem de tipos da API (sem emitir arquivos) |
+| `npm test` | 🧪 Suíte completa |
+| `npm run test:watch` | 👀 Testes em modo watch |
+
+</details>
+
+<details>
+<summary>🐳 <b>Separando build e run</b> (útil em Dockerfile)</summary>
 
 ```bash
 npm run build:web        # compila o editor em web/dist
 npx tsx src/server.ts    # sobe sem rebuildar
 ```
 
-> Os arquivos do editor (`web/dist`) são gerados no build e não vêm no
-> repositório. Se você subir o servidor sem eles, a raiz responde uma página
-> dizendo exatamente isso — a API continua funcionando normalmente.
+Os arquivos do editor (`web/dist`) são gerados no build e não vêm no repositório. Se você subir o servidor sem eles, a raiz responde uma página dizendo exatamente isso — a API continua funcionando normalmente.
 
-### Scripts disponíveis
-
-| Script | O que faz |
-|--------|-----------|
-| `npm run dev` | API com reload automático |
-| `npm start` | Compila o editor e sobe a API servindo tudo junto |
-| `npm run dev:web` | Editor com HMR (porta 5173) |
-| `npm run build:web` | Compila o editor para `web/dist` |
-| `npm run setup:web` | Instala só as dependências do editor |
-| `npm run build` | Checagem de tipos da API (sem emitir arquivos) |
-| `npm test` | Suíte completa |
-| `npm run test:watch` | Testes em modo watch |
+</details>
 
 ---
 
-## Convertendo
+## 🔄 Convertendo
 
 ```bash
 curl -X POST http://localhost:3000/api/convert \
@@ -136,7 +174,8 @@ curl -X POST http://localhost:3000/api/convert \
 
 Resposta padrão: `application/pdf` binário, com `Content-Disposition: attachment`.
 
-Mandando `accept: application/json`, vem o PDF em base64 junto dos metadados:
+<details>
+<summary>📦 <b>Resposta em base64</b> (adicione <code>accept: application/json</code>)</summary>
 
 ```json
 {
@@ -148,7 +187,10 @@ Mandando `accept: application/json`, vem o PDF em base64 junto dos metadados:
 }
 ```
 
-### Em Node
+</details>
+
+<details>
+<summary>🟩 <b>Chamando de Node</b></summary>
 
 ```js
 const response = await fetch('http://localhost:3000/api/convert', {
@@ -159,20 +201,21 @@ const response = await fetch('http://localhost:3000/api/convert', {
 const pdf = Buffer.from(await response.arrayBuffer());
 ```
 
-### Campos do request
+</details>
+
+### 📥 Campos do request
 
 | Campo | Obrigatório | Descrição |
-|-------|-------------|-----------|
-| `markdown` | sim | O conteúdo. Não pode ser vazio |
-| `templateId` | sim | O id copiado do editor |
-| `variables` | não | Preenche os `{{placeholders}}` do cabeçalho e do rodapé |
-| `filename` | não | Nome sugerido no download. O padrão é o nome do template |
-| `output` | não | `binary` (default), `base64` ou `path` — veja abaixo |
+|-------|:---:|-----------|
+| `markdown` | ✅ | O conteúdo. Não pode ser vazio |
+| `templateId` | ✅ | O id copiado do editor |
+| `variables` | | Preenche os `{{placeholders}}` do cabeçalho e do rodapé |
+| `filename` | | Nome sugerido no download. O padrão é o nome do template |
+| `output` | | `binary` (default), `base64` ou `path` |
 
-### Modo `output: "path"` (pensado para tools MCP)
+### 📂 Modo `output: "path"` (pensado para tools MCP)
 
-Devolve JSON com o **caminho absoluto** de um PDF já gravado em disco no host
-da API, evitando trafegar binário/base64:
+Devolve JSON com o **caminho absoluto** de um PDF já gravado em disco no host da API, evitando trafegar binário/base64:
 
 ```bash
 curl -X POST http://localhost:3000/api/convert \
@@ -190,59 +233,59 @@ curl -X POST http://localhost:3000/api/convert \
 }
 ```
 
-O arquivo cai em `MD2PDF_OUTPUT_DIR` (default `./storage/outputs`). O servidor
-roda um scheduler que apaga automaticamente os PDFs mais antigos que
-`MD2PDF_OUTPUT_TTL_MS` (default 24 h), varrendo a pasta a cada
-`MD2PDF_OUTPUT_CLEANUP_INTERVAL_MS` (default 1 h). Uma varredura extra roda na
-subida do servidor. Definir qualquer um desses valores como `0` desliga a
-limpeza automática.
+> [!NOTE]
+> O arquivo cai em `MD2PDF_OUTPUT_DIR` (default `./storage/outputs`). Um scheduler apaga PDFs mais antigos que `MD2PDF_OUTPUT_TTL_MS` (default 24 h). Definir `0` desliga a limpeza.
 
-O botão **"Copiar OpenAPI"** no header da lista de templates copia um único
-spec OpenAPI 3.0.3 com TODAS as operations que viram tools MCP: importar
-docx, listar templates, ler detalhes de um template e converter markdown.
-Cole em OAS2MCP (ou equivalente) uma vez só; funciona com qualquer template.
+> [!TIP]
+> O botão **"Copiar OpenAPI"** no header da lista de templates copia um spec 3.0.3 com TODAS as operações MCP: importar docx, listar templates, ler detalhes e converter markdown. Cole em OAS2MCP uma vez só; funciona com qualquer template.
 
 ---
 
-## Quebra de página
+## 📄 Quebra de página
 
-O conteúdo flui e quebra sozinho quando enche a página. Para forçar uma quebra,
-escreva no Markdown:
+O conteúdo flui e quebra sozinho. Para forçar uma quebra:
 
 ```markdown
 <!-- pagebreak -->
 ```
 
-Além disso o CSS gerado já cuida do que costuma sair feio:
+O CSS gerado já cuida do que costuma sair feio:
 
-- título nunca fica órfão no pé da página;
-- tabela, imagem e bloco de código não partem no meio quando cabem inteiros na
-  página seguinte;
-- o `<thead>` se repete quando uma tabela atravessa páginas.
+- 🚫 título nunca fica órfão no pé da página
+- 📊 tabela, imagem e bloco de código não partem no meio quando cabem inteiros na página seguinte
+- 🔁 o `<thead>` se repete quando uma tabela atravessa páginas
 
 ---
 
-## Endpoints
+## 🌐 Endpoints
+
+<details open>
+<summary><b>📚 Todos os endpoints</b></summary>
 
 | Método | Rota | O que faz |
 |--------|------|-----------|
-| `POST` | `/api/convert` | **Markdown + templateId → PDF** |
-| `GET` | `/api/templates` | Lista os templates |
-| `POST` | `/api/templates` | Cria |
-| `GET` | `/api/templates/:id` | Lê |
-| `PUT` | `/api/templates/:id` | Atualiza |
-| `DELETE` | `/api/templates/:id` | Remove |
-| `POST` | `/api/templates/:id/preview` | PDF de exemplo do template |
-| `POST` | `/api/assets` | Upload de imagem (multipart, campo `file`) |
-| `GET` | `/api/assets/:id` | Serve a imagem |
-| `DELETE` | `/api/assets/:id` | Remove a imagem |
-| `POST` | `/api/fonts` | Upload de fonte customizada (.ttf/.otf) |
-| `GET` | `/api/fonts` | Lista as fontes |
-| `GET` | `/api/fonts/:id` | Serve o binário da fonte |
-| `DELETE` | `/api/fonts/:id` | Remove (erro 409 se referenciada por template) |
-| `POST` | `/api/templates/analyze-docx` | Analisa um .docx e devolve os fatos + warnings, sem criar template |
-| `POST` | `/api/templates/from-docx` | Analisa um .docx e cria o template automaticamente |
-| `GET` | `/health` | Sinal de vida |
+| `POST` | `/api/convert` | 🎯 **Markdown + templateId → PDF** |
+| `GET` | `/api/templates` | 📋 Lista os templates |
+| `POST` | `/api/templates` | ➕ Cria |
+| `GET` | `/api/templates/:id` | 🔍 Lê |
+| `PUT` | `/api/templates/:id` | ✏️ Atualiza |
+| `DELETE` | `/api/templates/:id` | 🗑️ Remove (limpa assets órfãos automaticamente) |
+| `POST` | `/api/templates/:id/preview` | 👁️ PDF de exemplo do template |
+| `POST` | `/api/templates/:id/duplicate` | 📑 Copia (reusando os mesmos assets) |
+| `GET` | `/api/templates/:id/export` | 📦 Bundle JSON auto-contido |
+| `POST` | `/api/templates/import` | 📥 Importa bundle |
+| `POST` | `/api/assets` | ⬆️ Upload de imagem (multipart, campo `file`) |
+| `GET` | `/api/assets/:id` | 🖼️ Serve a imagem |
+| `DELETE` | `/api/assets/:id` | 🗑️ Remove a imagem |
+| `POST` | `/api/fonts` | 🔤 Upload de fonte customizada (.ttf/.otf) |
+| `GET` | `/api/fonts` | 📋 Lista as fontes |
+| `GET` | `/api/fonts/:id` | 📥 Serve o binário da fonte |
+| `DELETE` | `/api/fonts/:id` | 🗑️ Remove (409 se referenciada por template) |
+| `POST` | `/api/templates/analyze-docx` | 🔎 Analisa `.docx` sem criar template |
+| `POST` | `/api/templates/from-docx` | 🪄 Analisa `.docx` e cria o template |
+| `GET` | `/health` | 💓 Sinal de vida |
+
+</details>
 
 Erros vêm sempre no mesmo formato:
 
@@ -252,25 +295,24 @@ Erros vêm sempre no mesmo formato:
 ```
 
 | Status | Quando |
-|--------|--------|
-| `400` | Validação, id malformado, markdown vazio |
-| `404` | Template ou asset inexistente |
-| `422` | O template aponta para uma imagem que foi apagada |
-| `500` | Falha na impressão (com `requestId` no log) |
+|:---:|--------|
+| 🟡 `400` | Validação, id malformado, markdown vazio |
+| 🟠 `404` | Template ou asset inexistente |
+| 🟠 `422` | O template aponta para uma imagem que foi apagada |
+| 🔴 `500` | Falha na impressão (com `requestId` no log) |
 
 ---
 
-## O template
+## 🎨 O template
 
-Cabeçalho e rodapé têm três zonas — esquerda, centro, direita. Em cada zona você
-põe elementos:
+Cabeçalho e rodapé têm três zonas — 👈 esquerda, ⏺️ centro, 👉 direita. Em cada zona você põe elementos:
 
 | Tipo | Para quê |
-|------|----------|
-| `image` | logo, enviada via `/api/assets` |
-| `text` | texto fixo; aceita `{{variavel}}`, resolvida na conversão |
-| `pageNumber` | `{page}` e `{total}`, preenchidos página a página |
-| `date` | data do momento da conversão |
+|:---:|----------|
+| 🖼️ `image` | logo, enviada via `/api/assets` |
+| 📝 `text` | texto fixo; aceita `{{variavel}}`, resolvida na conversão |
+| 🔢 `pageNumber` | `{page}` e `{total}`, preenchidos página a página |
+| 📅 `date` | data do momento da conversão |
 
 ```json
 {
@@ -288,43 +330,53 @@ põe elementos:
 }
 ```
 
-> **A margem precisa acomodar a faixa.** `margins.top` tem que ser pelo menos
-> `header.heightMm + 5`, e o mesmo vale para o rodapé. Sem isso o Chromium corta a
-> faixa **sem avisar** — então o schema recusa, e o editor desenha o conflito na
-> folha em vez de só mostrar uma mensagem.
+> [!WARNING]
+> **A margem precisa acomodar a faixa.** `margins.top` tem que ser pelo menos `header.heightMm + 5`, e o mesmo vale para o rodapé. Sem isso o Chromium corta a faixa **sem avisar** — o schema recusa, e o editor desenha o conflito na folha em vez de só mostrar uma mensagem.
 
-### Capa (opcional)
+<details>
+<summary>📃 <b>Capa (opcional)</b></summary>
 
-Quando `cover.enabled` é `true`, o template gera uma primeira página customizada com
-layout completamente livre. Elementos (texto, imagem, data) são posicionados por
-coordenadas absolutas em milímetros, sem hierarquia de fluxo. Suporta `{{variáveis}}`
-resolvidas na conversão.
+Quando `cover.enabled` é `true`, o template gera uma primeira página customizada com layout completamente livre. Elementos (texto, imagem, data) são posicionados por coordenadas absolutas em milímetros, sem hierarquia de fluxo. Suporta `{{variáveis}}` resolvidas na conversão.
 
-O checkbox "aplicar header/footer na capa" controla se a faixa de cabeçalho/rodapé
-aparece na página 1. Quando desligado (padrão), a capa é gerada como PDF separado e
-concatenada ao documento — a numeração `{page}/{total}` do rodapé começa em `1/N` a
-partir da página 2 (primeira página do conteúdo).
+O checkbox "aplicar header/footer na capa" controla se a faixa de cabeçalho/rodapé aparece na página 1. Quando desligado (padrão), a capa é gerada como PDF separado e concatenada ao documento — a numeração `{page}/{total}` do rodapé começa em `1/N` a partir da página 2 (primeira página do conteúdo).
 
-### Fonte
+</details>
 
-`body.font.family` escolhe uma fonte web-safe da lista curada de presets. Para fontes
-customizadas, use `body.font.customFontId` referenciando um upload feito via
-`POST /api/fonts`. Fontes customizadas são automaticamente embutidas no PDF como
-`@font-face` com encapsulamento base64, sem dependências externas.
+<details>
+<summary>🔤 <b>Fonte</b></summary>
 
-### Cabeçalhos
+`body.font.family` escolhe uma fonte web-safe da lista curada de presets. Para fontes customizadas, use `body.font.customFontId` referenciando um upload feito via `POST /api/fonts`. Fontes customizadas são automaticamente embutidas no PDF como `@font-face` com encapsulamento base64, sem dependências externas.
 
-`headings.h1`, `headings.h2` e `headings.h3` configuram independentemente cor, negrito
-e tamanho para cada nível. Os níveis h4, h5 e h6 herdam o estilo de h3 automaticamente.
+</details>
+
+<details>
+<summary>📌 <b>Cabeçalhos H1/H2/H3</b></summary>
+
+`headings.h1`, `headings.h2` e `headings.h3` configuram independentemente cor, negrito e tamanho para cada nível. Os níveis h4, h5 e h6 herdam o estilo de h3 automaticamente.
+
+</details>
 
 ---
 
-## Como está montado
+## 🏗️ Como está montado
+
+```mermaid
+flowchart LR
+    MD[📝 Markdown] --> R[/api/convert/]
+    T[📋 Template JSON] --> R
+    R --> RENDER[render/template.ts<br/>função pura]
+    RENDER --> HTML[HTML + CSS]
+    HTML --> PW[Playwright Chromium]
+    PW --> PDF[📄 PDF]
+    R -.reusa.-> WEB[🎨 Editor React]
+    WEB -.mesmo módulo.-> RENDER
+```
 
 ```
 src/
   config.ts              porta, caminhos, limites
   domain/template.ts     schema Zod — a fonte da verdade do formato
+  domain/templateAssets  coleta assetIds pra GC pós-delete
   conversion.ts          costura storage + render + Chromium
   render/
     markdown.ts          markdown-it + sanitize-html + <!-- pagebreak -->
@@ -332,17 +384,18 @@ src/
     pdf.ts               Chromium sempre vivo, com fila e timeout
     pdfInfo.ts           contagem de páginas do PDF pronto
   storage/               um JSON por template, imagens em disco
-  routes/                templates, assets, convert
+  routes/                templates, assets, convert, fonts
+  docx/                  import: unzip → analyze → toTemplate
 web/                     editor visual (React + Vite)
 tests/                   unitários + integração (gera PDF de verdade)
+scripts/                 gen-sample-docx • gc-orphan-assets
 ```
 
-**`render/template.ts` é o centro do projeto.** Ela é uma função pura: não importa
-`fs`, nem Playwright, nem Fastify. Por isso o editor no browser importa exatamente
-o mesmo módulo que o servidor usa para imprimir — o preview bate com o PDF porque
-é o mesmo código, não uma segunda implementação do layout.
+> [!IMPORTANT]
+> **`render/template.ts` é o centro do projeto.** Ela é uma função pura: não importa `fs`, nem Playwright, nem Fastify. Por isso o editor no browser importa exatamente o mesmo módulo que o servidor usa para imprimir — o preview bate com o PDF porque é o mesmo código, não uma segunda implementação do layout.
 
-### Bibliotecas
+<details>
+<summary>📚 <b>Bibliotecas</b></summary>
 
 | Pacote | Papel |
 |--------|-------|
@@ -351,18 +404,21 @@ o mesmo módulo que o servidor usa para imprimir — o preview bate com o PDF po
 | `markdown-it` | Markdown → HTML |
 | `sanitize-html` | limpeza do HTML gerado |
 | `zod` | schema e validação |
+| `pizzip` + `fast-xml-parser` | leitura de `.docx` no import |
+| `pdf-lib` | concatenação de PDFs (capa + corpo) |
 | `react` + `vite` | editor visual |
 | `vitest` + `pdfjs-dist` | testes que abrem o PDF gerado |
 
+</details>
+
 ---
 
-## Importando do Word
+## 📥 Importando do Word
 
-Quando você já tem um `.docx` com o papel timbrado da empresa, o md2pdf
-consegue extrair o template automaticamente:
+Quando você já tem um `.docx` com o papel timbrado da empresa, o md2pdf consegue extrair o template automaticamente:
 
 ```bash
-curl -X POST http://localhost:3000/api/templates/from-docx?name=Bionexo \
+curl -X POST http://localhost:3000/api/templates/from-docx?name=MinhaEmpresa \
   -F "file=@meu-timbrado.docx"
 ```
 
@@ -370,7 +426,7 @@ A resposta traz:
 
 ```json
 {
-  "template": { "id": "tpl_abc...", "name": "Bionexo", "...": "..." },
+  "template": { "id": "tpl_abc...", "name": "MinhaEmpresa", "...": "..." },
   "warnings": [
     { "code": "EMF_NOT_SUPPORTED", "message": "word/media/image1.emf é EMF; ..." }
   ],
@@ -386,38 +442,44 @@ curl -X POST http://localhost:3000/api/convert \
   -d '{"templateId":"tpl_abc...","markdown":"# Doc","output":"path"}'
 ```
 
-### O que é importado
+<details>
+<summary>✅ <b>O que é importado</b></summary>
 
-- Formato e orientação da página (A4/Letter, portrait/landscape)
-- Margens
-- Cabeçalho e rodapé da seção default (texto, alinhamento, tipografia, logo)
-- Fonte, tamanho, cor e altura de linha do corpo (via estilo `Normal`)
-- Estilos de `Heading 1/2/3` (cor, negrito, tamanho)
-- Imagens PNG/JPG/SVG/GIF/WebP embutidas nos cabeçalhos/rodapés
+- 📐 Formato e orientação da página (A4/Letter, portrait/landscape)
+- 📏 Margens
+- 🖼️ Cabeçalho e rodapé da seção default (texto, alinhamento, tipografia, logo)
+- 🔤 Fonte, tamanho, cor e altura de linha do corpo (via estilo `Normal`)
+- 📌 Estilos de `Heading 1/2/3` (cor, negrito, tamanho)
+- 🌈 Imagens PNG/JPG/SVG/GIF/WebP embutidas nos cabeçalhos/rodapés
 
-### O que **não** é importado
+</details>
+
+<details>
+<summary>❌ <b>O que <i>não</i> é importado</b></summary>
 
 - Corpo do documento (isso vem do markdown que você envia depois)
 - Tabelas de estilo, numeração automática, campos, sumário
 - Imagens EMF/WMF (não renderizam em Chromium — vira warning)
 - Capa personalizada (a heurística é conservadora; edite depois se quiser)
 
-### Usando via MCP
+</details>
 
-O botão **"Copiar OpenAPI"** no header da lista de templates copia um
-único spec OpenAPI 3.0.3 com quatro operações:
+<details>
+<summary>🔌 <b>Usando via MCP</b></summary>
+
+O botão **"Copiar OpenAPI"** no header da lista de templates copia um único spec OpenAPI 3.0.3 com quatro operações:
 
 1. `importTemplateFromDocx` — recebe o `.docx`, devolve `template.id`
 2. `listTemplates` — lista os templates existentes (id, nome, timestamps)
 3. `getTemplate` — detalhes de um template (o agente inspeciona para descobrir `{{variáveis}}`)
 4. `convertWithTemplate` — recebe `templateId` + markdown (+ variables), devolve o path do PDF
 
-Cole em qualquer ferramenta OpenAPI→MCP (OAS2MCP e similares) uma vez só —
-funciona com qualquer template criado, agora e no futuro. Agentes (Claude,
-Copilot, Cursor) fazem o fluxo completo: "crie um template do docx X e
-depois converta o markdown Y com ele".
+Cole em qualquer ferramenta OpenAPI→MCP (OAS2MCP e similares) uma vez só — funciona com qualquer template criado, agora e no futuro. Agentes (Claude, Copilot, Cursor) fazem o fluxo completo: "crie um template do docx X e depois converta o markdown Y com ele".
 
-### Analisar sem persistir
+</details>
+
+<details>
+<summary>🔎 <b>Analisar sem persistir</b></summary>
 
 Se você quer inspecionar o que seria importado antes de criar o template:
 
@@ -428,26 +490,46 @@ curl -X POST http://localhost:3000/api/templates/analyze-docx \
 
 Devolve o mesmo `{ analysis, warnings }` sem criar template no disco.
 
+</details>
+
 ---
 
-## Segurança
+## 🧹 Gerenciamento de assets
+
+Não fica lixo em `storage/assets/`:
+
+- 🗑️ **`DELETE /api/templates/:id`** — depois de remover o template, o servidor apaga cada asset referenciado que **nenhum outro template ainda use**. Assets compartilhados (via `duplicate` ou reuso manual) sobrevivem enquanto tiver referência viva.
+- 🧹 **`scripts/gc-orphan-assets.mjs`** — para higienização pontual (ex.: assets deixados por uma versão anterior sem GC). Faz dry-run por padrão.
+
+```bash
+node scripts/gc-orphan-assets.mjs            # 👀 dry-run — só lista
+node scripts/gc-orphan-assets.mjs --apply    # 🗑️ apaga de fato
+
+MD2PDF_STORAGE=/data node scripts/gc-orphan-assets.mjs  # aponta pra outro dir
+```
+
+---
+
+## 🔒 Segurança
 
 O Markdown vem de fora, então o pipeline trata a entrada como não confiável:
 
-- HTML cru desligado no parser, e `sanitize-html` por cima como segunda camada;
-- JavaScript **desligado** na página do Chromium;
-- recurso externo bloqueado por padrão — uma `<img src="http://...">` no Markdown
-  não faz o servidor alcançar a rede interna;
-- ids validados por formato antes de virarem caminho de arquivo.
+- ⛔ HTML cru desligado no parser, e `sanitize-html` por cima como segunda camada
+- 🚫 JavaScript **desligado** na página do Chromium
+- 🌐 Recurso externo bloqueado por padrão — uma `<img src="http://...">` no Markdown não faz o servidor alcançar a rede interna
+- 🔐 Ids validados por formato antes de virarem caminho de arquivo
 
-**Não há autenticação no MVP.** Antes de expor isso na internet, coloque a API
-atrás de um proxy autenticado ou de uma rede privada.
+> [!CAUTION]
+> **Não há autenticação no MVP.** Antes de expor isso na internet, coloque a API atrás de um proxy autenticado ou de uma rede privada.
 
 ---
 
-## Configuração
+## ⚙️ Configuração
 
 Tudo por variável de ambiente, nenhuma obrigatória:
+
+<details open>
+<summary><b>🎛️ Variáveis</b></summary>
 
 | Variável | Padrão | O que muda |
 |----------|--------|------------|
@@ -455,27 +537,26 @@ Tudo por variável de ambiente, nenhuma obrigatória:
 | `HOST` | `0.0.0.0` | Interface de escuta |
 | `MD2PDF_STORAGE` | `./storage` | Onde ficam templates e imagens |
 | `MD2PDF_OUTPUT_DIR` | `./storage/outputs` | PDFs gerados no modo `output: "path"` |
-| `MD2PDF_OUTPUT_TTL_MS` | `86400000` (24 h) | Idade máxima dos PDFs em `MD2PDF_OUTPUT_DIR`; `0` desliga a limpeza |
-| `MD2PDF_OUTPUT_CLEANUP_INTERVAL_MS` | `3600000` (1 h) | Frequência da varredura de limpeza; `0` desliga a limpeza |
+| `MD2PDF_OUTPUT_TTL_MS` | `86400000` (24 h) | Idade máxima dos PDFs; `0` desliga a limpeza |
+| `MD2PDF_OUTPUT_CLEANUP_INTERVAL_MS` | `3600000` (1 h) | Frequência da varredura; `0` desliga |
 | `MAX_CONCURRENT` | `4` | Conversões simultâneas |
 | `CONVERSION_TIMEOUT_MS` | `30000` | Teto por conversão |
 
+</details>
+
 ---
 
-## Testes
+## 🧪 Testes
 
 ```bash
 npm test
 ```
 
-Os testes de PDF não checam só que "gerou algo": eles **geram documentos de
-verdade e os abrem com `pdfjs-dist`**, conferindo o número de páginas, o
-cabeçalho e o rodapé em cada página, e a paginação fechando certo (`3 de 3` na
-última).
+Os testes de PDF não checam só que "gerou algo": eles **geram documentos de verdade e os abrem com `pdfjs-dist`**, conferindo o número de páginas, o cabeçalho e o rodapé em cada página, e a paginação fechando certo (`3 de 3` na última).
 
 ---
 
-## Deploy
+## 🐳 Deploy
 
 Em Linux, o Chromium precisa de algumas bibliotecas de sistema:
 
@@ -483,7 +564,10 @@ Em Linux, o Chromium precisa de algumas bibliotecas de sistema:
 npx playwright install --with-deps chromium
 ```
 
-Em Docker, parta de uma imagem que já traz tudo:
+<details>
+<summary>🐳 <b>Dockerfile</b></summary>
+
+Parta de uma imagem que já traz tudo:
 
 ```dockerfile
 FROM mcr.microsoft.com/playwright:v1.62.1-noble
@@ -499,32 +583,67 @@ EXPOSE 3000
 CMD ["npx", "tsx", "src/server.ts"]
 ```
 
-Monte um volume em `/data`: é lá que ficam os templates e as imagens. Sem volume,
-tudo se perde quando o container reinicia.
+Monte um volume em `/data`: é lá que ficam os templates e as imagens. Sem volume, tudo se perde quando o container reinicia.
+
+</details>
 
 ---
 
-## Problemas comuns
+## 🩹 FAQ
 
-**A logo não aparece no PDF.**
-Confira se o `assetId` do template ainda existe em `/api/assets/:id`. Se foi
-apagado, a conversão devolve `422`. Imagens sempre são embutidas como `data:` URI
-— URL externa não funciona dentro de cabeçalho e rodapé no Chromium.
+<details>
+<summary>🖼️ <b>A logo não aparece no PDF</b></summary>
 
-**O cabeçalho aparece cortado.**
-A margem é menor que a faixa. Aumente `margins.top` para pelo menos
-`header.heightMm + 5`, ou use o botão "Ajustar a margem" no editor.
+Confira se o `assetId` do template ainda existe em `/api/assets/:id`. Se foi apagado, a conversão devolve `422`. Imagens sempre são embutidas como `data:` URI — URL externa não funciona dentro de cabeçalho e rodapé no Chromium.
 
-**`browserType.launch: Executable doesn't exist`.**
+</details>
+
+<details>
+<summary>✂️ <b>O cabeçalho aparece cortado</b></summary>
+
+A margem é menor que a faixa. Aumente `margins.top` para pelo menos `header.heightMm + 5`, ou use o botão "Ajustar a margem" no editor.
+
+</details>
+
+<details>
+<summary>🚫 <b><code>browserType.launch: Executable doesn't exist</code></b></summary>
+
 O Chromium não foi baixado. Rode `npx playwright install chromium`.
 
-**Conversão devolvendo timeout.**
+</details>
+
+<details>
+<summary>⏱️ <b>Conversão devolvendo timeout</b></summary>
+
 Documento muito grande ou markdown patológico. Aumente `CONVERSION_TIMEOUT_MS`.
 
-**A raiz responde "editor não compilado".**
-Os arquivos do editor não vêm no repositório. Rode `npm run build:web` (ou
-simplesmente `npm start`, que já faz isso).
+</details>
 
-**Uma imagem no Markdown não carrega.**
-Recurso externo é bloqueado de propósito. Embuta a imagem como `data:` URI dentro
-do próprio Markdown.
+<details>
+<summary>📄 <b>A raiz responde "editor não compilado"</b></summary>
+
+Os arquivos do editor não vêm no repositório. Rode `npm run build:web` (ou simplesmente `npm start`, que já faz isso).
+
+</details>
+
+<details>
+<summary>🌐 <b>Uma imagem no Markdown não carrega</b></summary>
+
+Recurso externo é bloqueado de propósito. Embuta a imagem como `data:` URI dentro do próprio Markdown.
+
+</details>
+
+<details>
+<summary>🗑️ <b>Assets acumulando em <code>storage/assets/</code></b></summary>
+
+Templates deletados agora limpam os assets sozinhos, mas se você tem lixo de versões antigas rode `node scripts/gc-orphan-assets.mjs` para listar e `--apply` para remover.
+
+</details>
+
+---
+
+<div align="center">
+
+Feito com ⚡ Fastify + 🎭 Playwright + ⚛️ React
+
+</div>
