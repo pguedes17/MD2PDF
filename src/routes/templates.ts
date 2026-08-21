@@ -1,4 +1,6 @@
-import type { FastifyInstance } from 'fastify';
+import path from 'node:path';
+import fs from 'node:fs/promises';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { TemplateInputSchema } from '../domain/template.js';
 import {
@@ -11,6 +13,55 @@ import type { AppDeps } from '../app.js';
 import { parseOrThrow } from './validation.js';
 import { analyzeDocx } from '../docx/analyze.js';
 import { toTemplateInput } from '../docx/toTemplate.js';
+
+/** JSON body shape aceito pelas rotas de import — usado por agentes MCP que preferem
+ *  passar um caminho absoluto no host da API em vez de fazer upload multipart. */
+const DocxPathBody = z.object({
+  docxPath: z
+    .string()
+    .min(1, 'docxPath é obrigatório')
+    .refine((p) => path.isAbsolute(p), 'docxPath precisa ser absoluto (ex.: C:/... ou /...)')
+    .refine((p) => p.toLowerCase().endsWith('.docx'), 'docxPath precisa terminar em .docx'),
+  name: z.string().trim().min(1).max(120).optional(),
+});
+
+/** Resolve o docx a partir de multipart OU JSON body. Devolve buffer + nome sugerido. */
+async function readDocxFromRequest(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<{ buf: Buffer; suggestedName: string; explicitName?: string } | null> {
+  const contentType = request.headers['content-type'] ?? '';
+
+  if (contentType.startsWith('multipart/')) {
+    const file = await request.file({ limits: { fileSize: 20 * 1024 * 1024 } });
+    if (!file) {
+      reply.code(400).send({ error: 'validation_failed', message: 'envie o docx no campo "file"' });
+      return null;
+    }
+    const buf = await file.toBuffer();
+    return { buf, suggestedName: file.filename.replace(/\.docx$/i, '') || 'Template importado' };
+  }
+
+  if (contentType.startsWith('application/json')) {
+    const body = parseOrThrow(DocxPathBody, request.body);
+    try {
+      const buf = await fs.readFile(body.docxPath);
+      const base = path.basename(body.docxPath).replace(/\.docx$/i, '') || 'Template importado';
+      return { buf, suggestedName: base, explicitName: body.name };
+    } catch (err) {
+      const e = err as NodeJS.ErrnoException;
+      const msg = e.code === 'ENOENT' ? 'arquivo não encontrado' : e.code === 'EACCES' ? 'sem permissão de leitura' : `falha ao ler o arquivo (${e.code ?? 'IO'})`;
+      reply.code(400).send({ error: 'docx_read_failed', message: `${msg}: ${body.docxPath}` });
+      return null;
+    }
+  }
+
+  reply.code(400).send({
+    error: 'validation_failed',
+    message: 'envie o docx como multipart/form-data (campo "file") ou application/json ({docxPath})',
+  });
+  return null;
+}
 
 /** Nome do arquivo do bundle a partir do nome do template — só ASCII e - */
 function bundleFilename(name: string): string {
@@ -52,21 +103,22 @@ simplesmente flui até encher a página.
 export async function templateRoutes(app: FastifyInstance, deps: AppDeps): Promise<void> {
   app.get('/api/templates', async () => deps.templateRepo.list());
 
-  // Importação de docx — rotas específicas antes de :id para legibilidade.
+  // Importação de docx — aceita multipart (browser) OU JSON com docxPath (agente MCP).
   app.post('/api/templates/analyze-docx', async (request, reply) => {
-    const file = await request.file({ limits: { fileSize: 20 * 1024 * 1024 } });
-    if (!file) return reply.code(400).send({ error: 'validation_failed', message: 'envie o docx no campo "file"' });
-    const buf = await file.toBuffer();
-    const { analysis, warnings } = await analyzeDocx(buf, deps.assetRepo);
+    const input = await readDocxFromRequest(request, reply);
+    if (!input) return;
+    const { analysis, warnings } = await analyzeDocx(input.buf, deps.assetRepo);
     return reply.send({ analysis, warnings });
   });
 
   app.post<{ Querystring: { name?: string } }>('/api/templates/from-docx', async (request, reply) => {
-    const file = await request.file({ limits: { fileSize: 20 * 1024 * 1024 } });
-    if (!file) return reply.code(400).send({ error: 'validation_failed', message: 'envie o docx no campo "file"' });
-    const buf = await file.toBuffer();
-    const { analysis, warnings: analyzeWarnings } = await analyzeDocx(buf, deps.assetRepo);
-    const name = request.query.name?.trim() || file.filename.replace(/\.docx$/i, '') || 'Template importado';
+    const input = await readDocxFromRequest(request, reply);
+    if (!input) return;
+    const { analysis, warnings: analyzeWarnings } = await analyzeDocx(input.buf, deps.assetRepo);
+    const name =
+      input.explicitName?.trim() ||
+      request.query.name?.trim() ||
+      input.suggestedName;
     const { templateInput, warnings: mapWarnings } = toTemplateInput(analysis, name);
     const template = await deps.templateRepo.create(templateInput);
     return reply.code(201).send({

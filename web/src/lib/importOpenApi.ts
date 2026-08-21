@@ -28,25 +28,43 @@ export function buildImportOpenApi(options: BuildOptions = {}): object {
       '/api/templates/from-docx': {
         post: {
           operationId: 'importTemplateFromDocx',
-          summary: 'Importa um docx/doc e cria um template md2pdf',
+          summary: 'Importa um .docx do disco local e cria um template md2pdf',
           description:
-            'Envia um arquivo `.docx` e recebe um template md2pdf pronto para uso, ' +
-            'reproduzindo cabeçalho, rodapé, fontes, cores e margens do original. ' +
-            'RESPOSTA: um JSON com `template.id` — GUARDE ESSE ID e passe em chamadas futuras à tool `convertWithTemplate`. ' +
+            'Cria um template md2pdf a partir de um arquivo .docx acessível pelo servidor. ' +
+            'ENVIE COMO application/json com o campo `docxPath` — caminho ABSOLUTO do .docx no host onde o servidor md2pdf está rodando ' +
+            '(ex.: `C:/DEV/md2pdf/tests/fixtures/docx/bionexo-requisitos.docx` no Windows, ou `/home/user/x.docx` no Linux). ' +
+            'O servidor lê o arquivo do próprio disco — não converta para base64, não faça upload, apenas passe o caminho. ' +
+            'Se o usuário mencionou um arquivo com sintaxe tipo `@caminho/arquivo.docx`, remova o `@` e passe o caminho puro. ' +
+            'Se o caminho fornecido for relativo, RESOLVA para absoluto antes de chamar (usando o cwd do projeto do usuário). ' +
+            'RESPOSTA: JSON com `template.id` — GUARDE ESSE ID e passe em chamadas futuras à tool `convertWithTemplate`. ' +
             'Se vierem `warnings`, mostre-as ao usuário (indicam decisões heurísticas que ele pode revisar no editor). ' +
             'QUANDO USAR: sempre que o usuário quiser criar um novo template a partir de um documento Word existente.',
-          parameters: [
-            {
-              in: 'query',
-              name: 'name',
-              required: false,
-              schema: { type: 'string' },
-              description: 'Nome do template a criar. Se omitido, usa o nome do arquivo.',
-            },
-          ],
           requestBody: {
             required: true,
             content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['docxPath'],
+                  properties: {
+                    docxPath: {
+                      type: 'string',
+                      minLength: 1,
+                      description:
+                        'Caminho ABSOLUTO do arquivo .docx no host do servidor md2pdf. ' +
+                        'Exemplo Windows: `C:/DEV/md2pdf/tests/fixtures/docx/bionexo-requisitos.docx`. ' +
+                        'Exemplo Linux: `/home/user/docs/timbrado.docx`. ' +
+                        'DEVE terminar em `.docx` e ser um caminho absoluto — caminhos relativos são rejeitados.',
+                    },
+                    name: {
+                      type: 'string',
+                      description:
+                        'Nome do template a criar. Se omitido, usa o nome do arquivo (sem extensão).',
+                    },
+                  },
+                  additionalProperties: false,
+                },
+              },
               'multipart/form-data': {
                 schema: {
                   type: 'object',
@@ -55,7 +73,8 @@ export function buildImportOpenApi(options: BuildOptions = {}): object {
                     file: {
                       type: 'string',
                       format: 'binary',
-                      description: 'O arquivo .docx a importar.',
+                      description:
+                        'ALTERNATIVA para clientes que fazem upload real (browser). Agentes MCP normalmente NÃO usam essa variante — prefiram `application/json` com `docxPath`.',
                     },
                   },
                 },

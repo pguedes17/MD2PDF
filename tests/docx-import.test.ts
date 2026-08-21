@@ -73,6 +73,82 @@ describe('POST /api/templates/analyze-docx', () => {
   });
 });
 
+describe('POST /api/templates/from-docx via JSON docxPath (agente MCP)', () => {
+  it('lê o arquivo do disco quando content-type é application/json', async () => {
+    const absPath = path.resolve('tests/fixtures/docx/bionexo-requisitos.docx');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/templates/from-docx',
+      payload: { docxPath: absPath, name: 'Bionexo via path' },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(res.statusCode, res.body).toBe(201);
+    const body = res.json();
+    expect(body.template.id).toMatch(/^tpl_/);
+    expect(body.template.name).toBe('Bionexo via path');
+    // Mesmo conteúdo importado — deve ter header não-vazio + assets como no fluxo multipart
+    expect(body.template.header.elements.length).toBeGreaterThanOrEqual(1);
+    expect(body.assetIds.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('analyze-docx também aceita JSON docxPath', async () => {
+    const absPath = path.resolve('tests/fixtures/docx/bionexo-requisitos.docx');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/templates/analyze-docx',
+      payload: { docxPath: absPath },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json().analysis).toBeTruthy();
+  });
+
+  it('recusa docxPath relativo com 400', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/templates/from-docx',
+      payload: { docxPath: 'tests/fixtures/docx/bionexo-requisitos.docx' },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().issues.some((i: { message: string }) => i.message.includes('absoluto'))).toBe(true);
+  });
+
+  it('recusa docxPath sem extensão .docx com 400', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/templates/from-docx',
+      payload: { docxPath: path.resolve('README.md') },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().issues.some((i: { message: string }) => i.message.includes('.docx'))).toBe(true);
+  });
+
+  it('devolve 400 com mensagem clara quando arquivo não existe', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/templates/from-docx',
+      payload: { docxPath: path.resolve('tests/fixtures/docx/inexistente.docx') },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('docx_read_failed');
+    expect(res.json().message).toContain('não encontrado');
+  });
+
+  it('content-type sem multipart nem json → 400 com mensagem instrutiva', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/templates/from-docx',
+      payload: 'lixo',
+      headers: { 'content-type': 'text/plain' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().message).toMatch(/multipart|docxPath/);
+  });
+});
+
 describe('POST /api/templates/from-docx oversize', () => {
   it('rejeita upload acima do limite de tamanho', async () => {
     // 21 MB of zeros — size check should trip before docx parsing

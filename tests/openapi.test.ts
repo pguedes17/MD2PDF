@@ -320,7 +320,13 @@ describe('buildImportOpenApi', () => {
     expect(spec.paths['/api/convert']).toBeTruthy();
     const importOp = spec.paths['/api/templates/from-docx'].post;
     expect(importOp.operationId).toBe('importTemplateFromDocx');
+    // Variante JSON (docxPath) é a primária para agentes MCP; multipart continua como alternativa.
+    expect(importOp.requestBody.content['application/json']).toBeTruthy();
     expect(importOp.requestBody.content['multipart/form-data']).toBeTruthy();
+    const jsonSchema = importOp.requestBody.content['application/json'].schema;
+    expect(jsonSchema.required).toContain('docxPath');
+    expect(jsonSchema.properties.docxPath.type).toBe('string');
+    expect(jsonSchema.properties.name).toBeTruthy();
     const convertOp = spec.paths['/api/convert'].post;
     expect(convertOp.operationId).toBe('convertWithTemplate');
     // templateId parametrizável (não enum de 1)
@@ -332,8 +338,12 @@ describe('buildImportOpenApi', () => {
   it('inclui instruções para o agente MCP no description', () => {
     const spec = buildImportOpenApi() as any;
     const importOp = spec.paths['/api/templates/from-docx'].post;
-    expect(importOp.description).toMatch(/docx/i);
+    // Description explicitly instructs the agent to pass an absolute path.
+    expect(importOp.description).toMatch(/docxPath/);
+    expect(importOp.description).toMatch(/absoluto/i);
     expect(importOp.description).toMatch(/template\.id/i);
+    // Agent should be told to remove `@caminho` prefix syntax often seen in chat clients.
+    expect(importOp.description).toMatch(/@/);
     const convertOp = spec.paths['/api/convert'].post;
     expect(convertOp.description).toMatch(/templateId/i);
   });
