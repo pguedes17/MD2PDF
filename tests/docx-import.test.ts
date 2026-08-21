@@ -96,8 +96,15 @@ describe('POST /api/templates/from-docx', () => {
   it('template gerado consegue produzir PDF via /api/convert', async () => {
     const mp = multipart('file', 'x.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', docxBuf);
     const created = await app.inject({ method: 'POST', url: '/api/templates/from-docx', payload: mp.payload, headers: mp.headers });
-    const templateId = created.json().template.id;
+    expect(created.statusCode, created.body).toBe(201);
+    const body = created.json();
 
+    // bionexo has a table-based header with logo + text → at least 1 element
+    expect(body.template.header.elements.length).toBeGreaterThanOrEqual(1);
+    // bionexo logo image was uploaded as an asset
+    expect(body.assetIds.length).toBeGreaterThanOrEqual(1);
+
+    const templateId = body.template.id;
     const conv = await app.inject({
       method: 'POST',
       url: '/api/convert',
