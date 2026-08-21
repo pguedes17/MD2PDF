@@ -39,7 +39,7 @@ export function buildImportOpenApi(options: BuildOptions = {}): object {
           description:
             'Cria um template md2pdf a partir de um arquivo .docx acessível pelo servidor. ' +
             'ENVIE COMO application/json com o campo `docxPath` — caminho ABSOLUTO do .docx no host onde o servidor md2pdf está rodando ' +
-            '(ex.: `C:/DEV/md2pdf/tests/fixtures/docx/bionexo-requisitos.docx` no Windows, ou `/home/user/x.docx` no Linux). ' +
+            '(ex.: `C:/DEV/md2pdf/tests/fixtures/docx/sample-requirements.docx` no Windows, ou `/home/user/x.docx` no Linux). ' +
             'O servidor lê o arquivo do próprio disco — não converta para base64, não faça upload, apenas passe o caminho. ' +
             'Se o usuário mencionou um arquivo com sintaxe tipo `@caminho/arquivo.docx`, remova o `@` e passe o caminho puro. ' +
             'Se o caminho fornecido for relativo, RESOLVA para absoluto antes de chamar (usando o cwd do projeto do usuário). ' +
@@ -59,10 +59,10 @@ export function buildImportOpenApi(options: BuildOptions = {}): object {
                       minLength: 1,
                       description:
                         'Caminho ABSOLUTO do arquivo .docx no host do servidor md2pdf. ' +
-                        'Exemplo Windows: `C:/DEV/md2pdf/tests/fixtures/docx/bionexo-requisitos.docx`. ' +
+                        'Exemplo Windows: `C:/DEV/md2pdf/tests/fixtures/docx/sample-requirements.docx`. ' +
                         'Exemplo Linux: `/home/user/docs/timbrado.docx`. ' +
                         'DEVE terminar em `.docx` e ser um caminho absoluto — caminhos relativos são rejeitados.',
-                      example: 'C:/DEV/md2pdf/tests/fixtures/docx/bionexo-requisitos.docx',
+                      example: 'C:/DEV/md2pdf/tests/fixtures/docx/sample-requirements.docx',
                     },
                     name: {
                       type: 'string',

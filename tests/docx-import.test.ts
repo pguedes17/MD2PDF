@@ -15,7 +15,7 @@ import { readPdf } from './helpers/readPdf.js';
 let app: FastifyInstance;
 let dir: string;
 
-const docxBuf = fsSync.readFileSync('tests/fixtures/docx/bionexo-requisitos.docx');
+const docxBuf = fsSync.readFileSync('tests/fixtures/docx/sample-requirements.docx');
 
 function multipart(field: string, filename: string, contentType: string, data: Buffer) {
   const boundary = '----md2pdftest';
@@ -49,7 +49,7 @@ afterAll(async () => {
 
 describe('POST /api/templates/analyze-docx', () => {
   it('devolve análise + warnings sem persistir template', async () => {
-    const mp = multipart('file', 'bionexo.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', docxBuf);
+    const mp = multipart('file', 'sample.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', docxBuf);
     const res = await app.inject({ method: 'POST', url: '/api/templates/analyze-docx', payload: mp.payload, headers: mp.headers });
     expect(res.statusCode, res.body).toBe(200);
     const body = res.json();
@@ -75,24 +75,24 @@ describe('POST /api/templates/analyze-docx', () => {
 
 describe('POST /api/templates/from-docx via JSON docxPath (agente MCP)', () => {
   it('lê o arquivo do disco quando content-type é application/json', async () => {
-    const absPath = path.resolve('tests/fixtures/docx/bionexo-requisitos.docx');
+    const absPath = path.resolve('tests/fixtures/docx/sample-requirements.docx');
     const res = await app.inject({
       method: 'POST',
       url: '/api/templates/from-docx',
-      payload: { docxPath: absPath, name: 'Bionexo via path' },
+      payload: { docxPath: absPath, name: 'Sample via path' },
       headers: { 'content-type': 'application/json' },
     });
     expect(res.statusCode, res.body).toBe(201);
     const body = res.json();
     expect(body.template.id).toMatch(/^tpl_/);
-    expect(body.template.name).toBe('Bionexo via path');
+    expect(body.template.name).toBe('Sample via path');
     // Mesmo conteúdo importado — deve ter header não-vazio + assets como no fluxo multipart
     expect(body.template.header.elements.length).toBeGreaterThanOrEqual(1);
     expect(body.assetIds.length).toBeGreaterThanOrEqual(1);
   });
 
   it('analyze-docx também aceita JSON docxPath', async () => {
-    const absPath = path.resolve('tests/fixtures/docx/bionexo-requisitos.docx');
+    const absPath = path.resolve('tests/fixtures/docx/sample-requirements.docx');
     const res = await app.inject({
       method: 'POST',
       url: '/api/templates/analyze-docx',
@@ -107,7 +107,7 @@ describe('POST /api/templates/from-docx via JSON docxPath (agente MCP)', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/templates/from-docx',
-      payload: { docxPath: 'tests/fixtures/docx/bionexo-requisitos.docx' },
+      payload: { docxPath: 'tests/fixtures/docx/sample-requirements.docx' },
       headers: { 'content-type': 'application/json' },
     });
     expect(res.statusCode).toBe(400);
@@ -168,17 +168,17 @@ describe('POST /api/templates/from-docx oversize', () => {
 
 describe('POST /api/templates/from-docx', () => {
   it('cria template a partir do docx real e devolve 201 com warnings', async () => {
-    const mp = multipart('file', 'bionexo.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', docxBuf);
+    const mp = multipart('file', 'sample.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', docxBuf);
     const res = await app.inject({
       method: 'POST',
-      url: '/api/templates/from-docx?name=Bionexo',
+      url: '/api/templates/from-docx?name=Sample',
       payload: mp.payload,
       headers: mp.headers,
     });
     expect(res.statusCode, res.body).toBe(201);
     const body = res.json();
     expect(body.template.id).toMatch(/^tpl_/);
-    expect(body.template.name).toBe('Bionexo');
+    expect(body.template.name).toBe('Sample');
     expect(Array.isArray(body.warnings)).toBe(true);
 
     // Template aparece na listagem
@@ -192,9 +192,9 @@ describe('POST /api/templates/from-docx', () => {
     expect(created.statusCode, created.body).toBe(201);
     const body = created.json();
 
-    // bionexo has a table-based header with logo + text → at least 1 element
+    // sample fixture has a table-based header with logo + text → at least 1 element
     expect(body.template.header.elements.length).toBeGreaterThanOrEqual(1);
-    // bionexo logo image was uploaded as an asset
+    // sample fixture logo image was uploaded as an asset
     expect(body.assetIds.length).toBeGreaterThanOrEqual(1);
 
     const templateId = body.template.id;

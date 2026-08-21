@@ -9,7 +9,7 @@ const textOnly = `<?xml version="1.0"?>
   <w:p>
     <w:pPr><w:jc w:val="right"/></w:pPr>
     <w:r><w:rPr><w:b/><w:sz w:val="20"/><w:color w:val="555555"/></w:rPr><w:t>Contrato </w:t></w:r>
-    <w:r><w:t>Bionexo</w:t></w:r>
+    <w:r><w:t>Exemplo</w:t></w:r>
   </w:p>
 </w:hdr>`;
 
@@ -34,7 +34,7 @@ describe('extractBand', () => {
     const el = b.elements[0]!;
     expect(el.type).toBe('text');
     if (el.type !== 'text') throw new Error();
-    expect(el.value).toBe('Contrato Bionexo');
+    expect(el.value).toBe('Contrato Exemplo');
     expect(el.align).toBe('right');
     expect(el.bold).toBe(true);
     expect(el.fontSizePt).toBe(10);

@@ -7,7 +7,7 @@ import { analyzeDocx } from '../../src/docx/analyze.js';
 import { createAssetRepo } from '../../src/storage/assetRepo.js';
 import { DocxAnalysisSchema } from '../../src/docx/schema.js';
 
-const buf = fsSync.readFileSync('tests/fixtures/docx/bionexo-requisitos.docx');
+const buf = fsSync.readFileSync('tests/fixtures/docx/sample-requirements.docx');
 
 let dir: string;
 beforeEach(async () => {

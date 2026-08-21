@@ -1,5 +1,3 @@
-<div align="center">
-
 # MD2PDF
 
 **API que converte Markdown em PDF aplicando um template salvo** — cabeçalho, rodapé,
@@ -7,8 +5,6 @@ margens e numeração em todas as páginas.
 
 Você monta o papel timbrado uma vez num editor visual, copia o id dele, e a partir
 daí uma única chamada converte qualquer Markdown com aquela identidade visual.
-
-</div>
 
 ---
 

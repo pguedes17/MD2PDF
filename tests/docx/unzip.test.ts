@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import { openDocx } from '../../src/docx/unzip.js';
 
-const buf = fs.readFileSync('tests/fixtures/docx/bionexo-requisitos.docx');
+const buf = fs.readFileSync('tests/fixtures/docx/sample-requirements.docx');
 
 describe('openDocx', () => {
   it('devolve texto do document.xml', () => {

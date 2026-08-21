@@ -59,7 +59,7 @@ describe('extractPageSetup', () => {
   });
 
   it('extrai do docx real sem erro', () => {
-    const buf = fs.readFileSync('tests/fixtures/docx/bionexo-requisitos.docx');
+    const buf = fs.readFileSync('tests/fixtures/docx/sample-requirements.docx');
     const xml = openDocx(buf).text('word/document.xml')!;
     const { page } = extractPageSetup(xml);
     expect(['A4', 'Letter']).toContain(page.format);

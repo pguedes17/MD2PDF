@@ -24,9 +24,9 @@ describe('mapFontsToPresets', () => {
   });
 
   it('fonte desconhecida cai em unmatched + warning', () => {
-    const r = mapFontsToPresets(['BionexoSans']);
-    expect(r.presetMatches['BionexoSans']).toBeUndefined();
-    expect(r.unmatched).toContain('BionexoSans');
+    const r = mapFontsToPresets(['CustomSans']);
+    expect(r.presetMatches['CustomSans']).toBeUndefined();
+    expect(r.unmatched).toContain('CustomSans');
     expect(r.warnings.some((w) => w.code === 'FONT_NOT_MATCHED')).toBe(true);
   });
 });
