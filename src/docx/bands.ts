@@ -59,29 +59,53 @@ function imageOfParagraph(
   return { docxPath: `word/${rels[rId]}`, heightMm };
 }
 
+const CELL_ALIGNS: Array<'left' | 'center' | 'right'> = ['left', 'center', 'right'];
+
+function processParagraph(
+  p: unknown,
+  rels: Record<string, string>,
+  align: 'left' | 'center' | 'right',
+  elements: BandElement[],
+): void {
+  const image = imageOfParagraph(p, rels);
+  if (image) {
+    elements.push({
+      type: 'image',
+      imageDocxPath: image.docxPath,
+      align,
+      heightMm: Math.round(image.heightMm * 10) / 10,
+    });
+    return;
+  }
+  const text = textOfParagraph(p).trim();
+  if (!text) return;
+  const typo = typographyOfFirstRun(p);
+  elements.push({ type: 'text', value: text, align, ...typo });
+}
+
 export function extractBand(bandXml: string, rels: Record<string, string>, _theme: Theme): BandExtract {
   const doc = parseXml(bandXml);
   const root = pick(doc, 'hdr') ?? pick(doc, 'ftr');
-  const paragraphs = pickAll(root, 'p');
   const elements: BandElement[] = [];
   const warnings: Warning[] = [];
 
-  for (const p of paragraphs) {
-    const align = alignOf(p);
-    const image = imageOfParagraph(p, rels);
-    if (image) {
-      elements.push({
-        type: 'image',
-        imageDocxPath: image.docxPath,
-        align,
-        heightMm: Math.round(image.heightMm * 10) / 10,
-      });
-      continue;
+  // Scan top-level paragraphs directly in the band root.
+  for (const p of pickAll(root, 'p')) {
+    processParagraph(p, rels, alignOf(p), elements);
+  }
+
+  // Scan first row of any w:tbl children: each cell's paragraph becomes a
+  // band element with align forced by cell index (0→left, 1→center, 2→right).
+  for (const tbl of pickAll(root, 'tbl')) {
+    const firstRow = pick(tbl, 'tr');
+    if (!firstRow) continue;
+    const cells = pickAll(firstRow, 'tc');
+    for (let i = 0; i < cells.length; i++) {
+      const cellAlign = CELL_ALIGNS[Math.min(i, 2)]!;
+      for (const p of pickAll(cells[i], 'p')) {
+        processParagraph(p, rels, cellAlign, elements);
+      }
     }
-    const text = textOfParagraph(p).trim();
-    if (!text) continue;
-    const typo = typographyOfFirstRun(p);
-    elements.push({ type: 'text', value: text, align, ...typo });
   }
 
   return { elements, warnings };

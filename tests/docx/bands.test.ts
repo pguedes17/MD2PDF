@@ -65,4 +65,50 @@ describe('extractBand', () => {
     const b = extractBand(xml, {}, emptyTheme);
     expect(b.elements).toHaveLength(1);
   });
+
+  it('tabela 1x3 extrai células como left/center/right', () => {
+    // Cell 0: image (left), Cell 1: text (center), Cell 2: page-number-like text (right)
+    const xml = `<?xml version="1.0"?>
+<w:hdr xmlns:w="urn:x" xmlns:r="urn:y" xmlns:wp="urn:wp" xmlns:a="urn:a" xmlns:pic="urn:pic">
+  <w:tbl>
+    <w:tr>
+      <w:tc>
+        <w:p>
+          <w:r><w:drawing>
+            <wp:inline>
+              <wp:extent cx="1524000" cy="609600"/>
+              <a:graphic><a:graphicData>
+                <pic:pic><pic:blipFill><a:blip r:embed="rId1"/></pic:blipFill></pic:pic>
+              </a:graphicData></a:graphic>
+            </wp:inline>
+          </w:drawing></w:r>
+        </w:p>
+      </w:tc>
+      <w:tc>
+        <w:p>
+          <w:pPr><w:jc w:val="right"/></w:pPr>
+          <w:r><w:t>Company Name</w:t></w:r>
+        </w:p>
+      </w:tc>
+      <w:tc>
+        <w:p>
+          <w:pPr><w:jc w:val="left"/></w:pPr>
+          <w:r><w:t>Page 1</w:t></w:r>
+        </w:p>
+      </w:tc>
+    </w:tr>
+  </w:tbl>
+</w:hdr>`;
+    const b = extractBand(xml, { rId1: 'media/logo.png' }, emptyTheme);
+    expect(b.elements).toHaveLength(3);
+    // Cell 0 → image, align forced to left
+    expect(b.elements[0]!.type).toBe('image');
+    expect(b.elements[0]!.align).toBe('left');
+    // Cell 1 → text, align forced to center (index 1), overriding jc=right
+    expect(b.elements[1]!.type).toBe('text');
+    expect(b.elements[1]!.align).toBe('center');
+    // Cell 2 → text, align forced to right (index 2), overriding jc=left
+    expect(b.elements[2]!.type).toBe('text');
+    expect(b.elements[2]!.align).toBe('right');
+  });
 });
