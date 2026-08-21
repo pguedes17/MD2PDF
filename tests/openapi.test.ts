@@ -111,13 +111,33 @@ describe('buildTemplateOpenApi', () => {
     expect(post.description).toContain('`path`');
   });
 
-  it('marca markdown como required com descrição prefixada por "Document"', () => {
+  it('markdown vira alternativo a markdownPath (contrato "um dos dois") — nenhum dos dois é required no schema, validação fica no servidor', () => {
     const schema = docOf(makeTemplate()).paths['/api/convert']!.post.requestBody.content[
       'application/json'
     ].schema;
-    expect(schema.required).toContain('markdown');
+    // Antes: `markdown` estava em `required`. Agora sai — o par (markdown | markdownPath)
+    // é validado no handler porque OpenAPI 3.0.3 não descreve "oneOf" no root sem quebrar
+    // o mapper do oas2mcp.
+    expect(schema.required).not.toContain('markdown');
+    expect(schema.required).not.toContain('markdownPath');
     expect(schema.properties.markdown.type).toBe('string');
     expect(schema.properties.markdown.description).toMatch(/^Document markdown/);
+    expect(schema.properties.markdownPath.type).toBe('string');
+    // Descrição precisa deixar claro que os dois campos são alternativos e apontar quando usar cada um.
+    expect(schema.properties.markdown.description.toLowerCase()).toMatch(/alternativ|um dos dois/);
+    expect(schema.properties.markdownPath.description.toLowerCase()).toMatch(/alternativ|um dos dois/);
+    expect(schema.properties.markdownPath.description.toLowerCase()).toContain('absolut');
+  });
+
+  it('resposta 200 do convert expõe path E fileUri (para harnesses que auto-linkificam file://)', () => {
+    const spec = docOf(makeTemplate()) as any;
+    const ok = spec.paths['/api/convert'].post.responses['200'];
+    const schema = ok.content['application/json'].schema;
+    expect(schema.required).toEqual(expect.arrayContaining(['path', 'fileUri']));
+    expect(schema.properties.fileUri.type).toBe('string');
+    expect(schema.properties.fileUri.format).toBe('uri');
+    // A descrição da response menciona os dois modos.
+    expect(ok.description.toLowerCase()).toMatch(/fileuri|file:\/\//);
   });
 
   it('sem variáveis: não inclui o campo `variables` no schema', () => {
@@ -311,6 +331,7 @@ describe('buildTemplateOpenApi', () => {
 });
 
 import { buildImportOpenApi } from '../web/src/lib/importOpenApi.js';
+import { WarningCodeEnum } from '../src/docx/schema.js';
 
 describe('buildImportOpenApi', () => {
   it('inclui os 2 operations do fluxo MCP', () => {
@@ -346,5 +367,114 @@ describe('buildImportOpenApi', () => {
     expect(importOp.description).toMatch(/@/);
     const convertOp = spec.paths['/api/convert'].post;
     expect(convertOp.description).toMatch(/templateId/i);
+  });
+
+  it('warnings.code é enumerado com todos os códigos definidos em src/docx/schema.ts', () => {
+    // Pins the sync between the OpenAPI enum and the runtime WarningCodeEnum —
+    // if someone adds a new warning code in the backend, this test forces the spec to follow.
+    const spec = buildImportOpenApi() as any;
+    const importOp = spec.paths['/api/templates/from-docx'].post;
+    const warnings = importOp.responses['201'].content['application/json']
+      .schema.properties.warnings;
+    expect(warnings.items.properties.code.enum).toEqual([...WarningCodeEnum.options]);
+  });
+
+  it('docxPath inclui um example concreto para o MCP client exibir como hint', () => {
+    const spec = buildImportOpenApi() as any;
+    const jsonSchema = spec.paths['/api/templates/from-docx'].post
+      .requestBody.content['application/json'].schema;
+    expect(typeof jsonSchema.properties.docxPath.example).toBe('string');
+    expect(jsonSchema.properties.docxPath.example).toMatch(/\.docx$/i);
+  });
+
+  it('respostas 400/413 do from-docx expõem schema tipado {error, message}', () => {
+    const spec = buildImportOpenApi() as any;
+    const responses = spec.paths['/api/templates/from-docx'].post.responses;
+
+    const err400 = responses['400'].content['application/json'].schema;
+    expect(err400.required).toEqual(expect.arrayContaining(['error', 'message']));
+    // Códigos estáveis emitidos pelo backend hoje (src/routes/templates.ts).
+    expect(err400.properties.error.enum).toEqual(
+      expect.arrayContaining(['validation_failed', 'docx_read_failed']),
+    );
+
+    const err413 = responses['413'].content['application/json'].schema;
+    expect(err413.required).toEqual(expect.arrayContaining(['error', 'message']));
+  });
+
+  it('convert expõe markdown E markdownPath como alternativos; nenhum dos dois é required', () => {
+    const spec = buildImportOpenApi() as any;
+    const bodySchema = spec.paths['/api/convert'].post.requestBody
+      .content['application/json'].schema;
+    expect(bodySchema.required).not.toContain('markdown');
+    expect(bodySchema.required).not.toContain('markdownPath');
+    expect(bodySchema.properties.markdownPath.type).toBe('string');
+    expect(bodySchema.properties.markdownPath.description.toLowerCase()).toMatch(/absolut/);
+    expect(bodySchema.properties.markdownPath.description.toLowerCase()).toMatch(/alternativ|um dos dois/);
+    expect(bodySchema.properties.markdownPath.example).toMatch(/\.md$/i);
+    // A description da operação orienta o agente sobre quando preferir cada um.
+    const desc = spec.paths['/api/convert'].post.description.toLowerCase();
+    expect(desc).toContain('markdownpath');
+    expect(desc).toMatch(/prefir|prefer/);
+  });
+
+  it('resposta 200 do convert inclui fileUri além de path', () => {
+    const spec = buildImportOpenApi() as any;
+    const ok = spec.paths['/api/convert'].post.responses['200'];
+    const schema = ok.content['application/json'].schema;
+    expect(schema.required).toEqual(expect.arrayContaining(['path', 'fileUri']));
+    expect(schema.properties.fileUri.type).toBe('string');
+    expect(schema.properties.fileUri.format).toBe('uri');
+  });
+
+  it('400 do convert inclui markdown_read_failed nos códigos possíveis', () => {
+    const spec = buildImportOpenApi() as any;
+    const err400 = spec.paths['/api/convert'].post.responses['400'];
+    expect(err400.description).toContain('markdown_read_failed');
+    const schema = err400.content['application/json'].schema;
+    expect(schema.required).toEqual(expect.arrayContaining(['error', 'message']));
+  });
+
+  it('respostas 400/404/422 do convert expõem schema tipado com códigos estáveis', () => {
+    const spec = buildImportOpenApi() as any;
+    const responses = spec.paths['/api/convert'].post.responses;
+
+    // 400 — não fixa enum (backend usa fallback dinâmico), só garante a shape do envelope.
+    const err400 = responses['400'].content['application/json'].schema;
+    expect(err400.required).toEqual(expect.arrayContaining(['error', 'message']));
+
+    // 404 — sempre `not_found`.
+    const err404 = responses['404'].content['application/json'].schema;
+    expect(err404.properties.error.enum).toEqual(['not_found']);
+
+    // 422 — carrega o `assetId` que o handler adiciona no envelope.
+    const err422 = responses['422'].content['application/json'].schema;
+    expect(err422.properties.error.enum).toEqual(['asset_not_found']);
+    expect(err422.required).toEqual(expect.arrayContaining(['assetId']));
+  });
+
+  it('expõe listTemplates + getTemplate para o fluxo "gerar PDF de template existente"', () => {
+    const spec = buildImportOpenApi() as any;
+
+    // listTemplates
+    const list = spec.paths['/api/templates']?.get;
+    expect(list).toBeTruthy();
+    expect(list.operationId).toBe('listTemplates');
+    const listItems = list.responses['200'].content['application/json'].schema.items;
+    expect(listItems.required).toEqual(expect.arrayContaining(['id', 'name', 'updatedAt']));
+    expect(list.description.toLowerCase()).toMatch(/(escolher|escolha|listar)/);
+
+    // getTemplate
+    const get = spec.paths['/api/templates/{id}']?.get;
+    expect(get).toBeTruthy();
+    expect(get.operationId).toBe('getTemplate');
+    const idParam = get.parameters.find((p: any) => p.name === 'id');
+    expect(idParam.required).toBe(true);
+    expect(idParam.in).toBe('path');
+    // A description deve ensinar o agente a extrair {{...}} do header/footer.
+    expect(get.description).toMatch(/\{\{/);
+    expect(get.description.toLowerCase()).toMatch(/vari(á|a)ve/);
+    // 404 documentado (template inexistente).
+    expect(get.responses['404']).toBeTruthy();
   });
 });

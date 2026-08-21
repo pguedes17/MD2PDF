@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { toTemplateInput } from '../../src/docx/toTemplate.js';
+import { toTemplateInput, detectPaginationFormat } from '../../src/docx/toTemplate.js';
 import type { DocxAnalysis } from '../../src/docx/schema.js';
 import { TemplateInputSchema, BAND_MARGIN_SLACK_MM } from '../../src/domain/template.js';
 
@@ -67,6 +67,77 @@ describe('toTemplateInput', () => {
     expect(el.type).toBe('image');
     if (el.type !== 'image') throw new Error();
     expect(el.assetId).toBe('ast_abcdefghijkl');
+  });
+
+  // A ideia é evitar que "Page 7 of 7" (número gravado pelo Word) vire literal no
+  // template e imprima 7/7 em todas as páginas do PDF gerado.
+  describe('detecta paginação (pt/en/es) e converte em pageNumber', () => {
+    it.each([
+      // [entrada, formato esperado] — separador e caixa são preservados fielmente.
+      ['Page 7 of 7', 'Page {page} of {total}'],
+      ['page 1 OF 12', 'page {page} OF {total}'],
+      ['Página 3 de 10', 'Página {page} de {total}'],
+      ['PÁGINA 1 DE 5', 'PÁGINA {page} DE {total}'],
+      ['Pág. 1 de 5', 'Pág. {page} de {total}'],
+      ['Pg 4 of 8', 'Pg {page} of {total}'],
+      ['Pág. 3/10', 'Pág. {page}/{total}'],
+      ['3 / 10', '{page} / {total}'],
+      ['1/5', '{page}/{total}'],
+      ['1 de 5', '{page} de {total}'],
+      ['  Page 2 of 3  ', 'Page {page} of {total}'],
+    ])('%s → %s', (input, expected) => {
+      expect(detectPaginationFormat(input)).toBe(expected);
+    });
+
+    it.each([
+      'Página do documento', // "Página" seguido de texto, sem número
+      'Anexo 3', // número sem prefixo/total
+      'Page 3', // sem total — ambíguo demais para converter
+      'Página 5', // idem
+      'Rodapé qualquer',
+      '', // vazio
+      '3', // só número
+    ])('não converte: %s', (input) => {
+      expect(detectPaginationFormat(input)).toBeNull();
+    });
+
+    it('rodapé com "Page 7 of 7" vira elemento pageNumber + warning PAGE_NUMBER_DETECTED', () => {
+      const withPagination: DocxAnalysis = {
+        ...base,
+        footers: {
+          default: {
+            heightMm: 15,
+            elements: [
+              { type: 'text', value: 'Confidencial', align: 'left', bold: false, fontSizePt: 8, color: '#444444', yMm: 0 },
+              { type: 'text', value: 'Page 7 of 7', align: 'right', bold: true, fontSizePt: 9, color: '#222222', yMm: 0 },
+            ],
+          },
+        },
+      };
+      const { templateInput, warnings } = toTemplateInput(withPagination, 'X');
+
+      const footerElements = templateInput.footer.elements;
+      expect(footerElements).toHaveLength(2);
+
+      // Primeiro elemento continua texto.
+      expect(footerElements[0]!.type).toBe('text');
+
+      // Segundo virou pageNumber preservando tipografia + alinhamento.
+      const pageEl = footerElements[1]!;
+      expect(pageEl.type).toBe('pageNumber');
+      if (pageEl.type !== 'pageNumber') throw new Error();
+      expect(pageEl.format).toBe('Page {page} of {total}');
+      expect(pageEl.align).toBe('right');
+      expect(pageEl.bold).toBe(true);
+      expect(pageEl.fontSizePt).toBe(9);
+      expect(pageEl.color).toBe('#222222');
+
+      // Warning específico, com código estável.
+      const pageWarning = warnings.find((w) => w.code === 'PAGE_NUMBER_DETECTED');
+      expect(pageWarning).toBeDefined();
+      expect(pageWarning?.message).toContain('Page 7 of 7');
+      expect(pageWarning?.message).toContain('Page {page} of {total}');
+    });
   });
 
   it('imagem sem asset match é pulada com warning', () => {

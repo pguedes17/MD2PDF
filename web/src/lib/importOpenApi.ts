@@ -1,10 +1,14 @@
 /**
- * Gera OpenAPI 3.0.3 para o fluxo MCP de import + conversion:
- *   (1) importTemplateFromDocx  → recebe .docx, devolve template.id
- *   (2) convertWithTemplate     → recebe templateId + markdown, devolve path do PDF
+ * Gera OpenAPI 3.0.3 para o fluxo MCP completo do md2pdf:
+ *   - importTemplateFromDocx → cria template a partir de .docx
+ *   - listTemplates          → lista templates existentes (para o agente escolher)
+ *   - getTemplate            → detalhes de um template (para descobrir variáveis)
+ *   - convertWithTemplate    → gera o PDF, dado o templateId + markdown
  *
- * Sem template-id fixo: as duas tools funcionam em qualquer template criado.
+ * Sem template-id fixo: as tools funcionam em qualquer template criado.
  */
+
+import { WarningCodeEnum } from '../../../src/docx/schema.js';
 
 interface BuildOptions {
   serverUrl?: string;
@@ -16,12 +20,15 @@ export function buildImportOpenApi(options: BuildOptions = {}): object {
   return {
     openapi: '3.0.3',
     info: {
-      title: 'md2pdf — Import + Convert (MCP)',
-      version: '1.0.0',
+      title: 'md2pdf — Workflow completo (MCP)',
+      version: '1.1.0',
       description:
-        'Fluxo em duas etapas para gerar PDFs a partir de um template extraído de um docx: ' +
-        '(1) importe um .docx com `importTemplateFromDocx` para criar o template; ' +
-        '(2) use o `template.id` devolvido em `convertWithTemplate` sempre que precisar produzir um PDF com aquele template.',
+        'Toolkit MCP para o md2pdf. Fluxos suportados: ' +
+        '(A) CRIAR TEMPLATE — importe um .docx com `importTemplateFromDocx`; guarde o `template.id`. ' +
+        '(B) GERAR PDF DE UM TEMPLATE JÁ EXISTENTE — chame `listTemplates` para o usuário escolher, ' +
+        '`getTemplate` para descobrir se ele tem variáveis (`{{placeholder}}` no header/footer), ' +
+        'pergunte os valores das variáveis ao usuário, então chame `convertWithTemplate`. ' +
+        'NUNCA invente valores de variáveis; NUNCA reutilize um `templateId` de uma conversa anterior sem confirmar.',
     },
     servers: [{ url: serverUrl }],
     paths: {
@@ -113,16 +120,8 @@ export function buildImportOpenApi(options: BuildOptions = {}): object {
                           properties: {
                             code: {
                               type: 'string',
-                              enum: [
-                                'EMF_NOT_SUPPORTED',
-                                'UNKNOWN_PAGE_SIZE',
-                                'MULTIPLE_SECTIONS',
-                                'FONT_NOT_MATCHED',
-                                'POSSIBLE_COVER_IGNORED',
-                                'HEADER_HAS_TABLE_STYLE',
-                                'EVEN_PAGE_HEADER_IGNORED',
-                                'THEME_COLOR_FALLBACK',
-                              ],
+                              // Fonte única: src/docx/schema.ts — se um code novo for adicionado lá, aparece aqui automaticamente.
+                              enum: [...WarningCodeEnum.options],
                             },
                             message: {
                               type: 'string',
@@ -196,24 +195,136 @@ export function buildImportOpenApi(options: BuildOptions = {}): object {
           },
         },
       },
+      '/api/templates': {
+        get: {
+          operationId: 'listTemplates',
+          summary: 'Lista os templates já criados',
+          description:
+            'Retorna um array com os templates existentes (id, nome, timestamps). Use antes de `convertWithTemplate` ' +
+            'quando o usuário quiser gerar um PDF sem ter mencionado explicitamente qual template — apresente a lista ' +
+            'ORDENADA pelo `updatedAt` decrescente (a API já devolve assim) e deixe o usuário escolher por número ou nome. ' +
+            'Se a lista vier vazia, ofereça criar um novo template via `importTemplateFromDocx`.',
+          responses: {
+            '200': {
+              description: 'Lista (possivelmente vazia) de templates.',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      required: ['id', 'name', 'createdAt', 'updatedAt'],
+                      properties: {
+                        id: {
+                          type: 'string',
+                          pattern: '^tpl_[A-Za-z0-9_-]{12}$',
+                          description: 'Id estável do template. Passe em `getTemplate` ou `convertWithTemplate`.',
+                        },
+                        name: { type: 'string', description: 'Nome legível do template.' },
+                        createdAt: { type: 'string', format: 'date-time' },
+                        updatedAt: { type: 'string', format: 'date-time' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/templates/{id}': {
+        get: {
+          operationId: 'getTemplate',
+          summary: 'Detalhes de um template — use para descobrir suas variáveis',
+          description:
+            'Retorna o template completo, incluindo `header.elements` e `footer.elements`. ' +
+            'USO PRINCIPAL: descobrir quais variáveis `{{nome}}` o template exige antes de chamar `convertWithTemplate`. ' +
+            'Como fazer: itere `header.elements` e `footer.elements`; para cada elemento com `type === "text"`, ' +
+            'extraia TODAS as ocorrências de `{{palavra}}` do campo `value`. Colete os nomes únicos, ordene alfabeticamente, ' +
+            'e para cada nome PERGUNTE ao usuário o valor. Depois passe todos como `variables: {nome: valor, ...}` em `convertWithTemplate`. ' +
+            'Se nenhum elemento tem `{{...}}`, o template não tem variáveis — não pergunte nada e chame convert direto.',
+          parameters: [
+            {
+              in: 'path',
+              name: 'id',
+              required: true,
+              schema: { type: 'string', pattern: '^tpl_[A-Za-z0-9_-]{12}$' },
+              description: 'Id do template (de `listTemplates` ou fornecido pelo usuário).',
+            },
+          ],
+          responses: {
+            '200': {
+              description: 'Template completo. Inspecione `header.elements` e `footer.elements` para achar `{{variáveis}}`.',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    required: ['id', 'name', 'page', 'header', 'footer'],
+                    properties: {
+                      id: { type: 'string' },
+                      name: { type: 'string' },
+                      page: {
+                        type: 'object',
+                        description: 'Geometria da página (format, orientation, margins).',
+                      },
+                      header: {
+                        type: 'object',
+                        required: ['heightMm', 'elements'],
+                        properties: {
+                          heightMm: { type: 'number' },
+                          elements: {
+                            type: 'array',
+                            description:
+                              'Elementos posicionados no cabeçalho. Elementos `type: "text"` podem conter `{{variáveis}}` no campo `value`.',
+                            items: { type: 'object' },
+                          },
+                        },
+                      },
+                      footer: {
+                        type: 'object',
+                        required: ['heightMm', 'elements'],
+                        properties: {
+                          heightMm: { type: 'number' },
+                          elements: {
+                            type: 'array',
+                            description:
+                              'Elementos posicionados no rodapé. Elementos `type: "text"` podem conter `{{variáveis}}` no campo `value`.',
+                            items: { type: 'object' },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            '404': {
+              description: 'Template não encontrado — o id não existe (ou foi apagado). Chame `listTemplates` para ver os disponíveis.',
+            },
+          },
+        },
+      },
       '/api/convert': {
         post: {
           operationId: 'convertWithTemplate',
           summary: 'Gera um PDF a partir de markdown usando um template já existente',
           description:
-            'Converte o `markdown` informado usando o template identificado por `templateId`. ' +
+            'Converte um Markdown usando o template identificado por `templateId`. ' +
+            'ENVIE O CONTEÚDO POR EXATAMENTE UM DE DOIS CAMPOS: ' +
+            '(a) `markdown` — string inline (bom para conteúdo curto/gerado on-the-fly); ' +
+            '(b) `markdownPath` — caminho ABSOLUTO de um `.md` no host da API (PREFIRA ESTE quando o arquivo já existir em disco: evita transportar centenas de KB de conteúdo pelo pipeline do LLM e é significativamente mais rápido). ' +
             'PROTOCOLO: o `templateId` deve vir de uma chamada anterior a `importTemplateFromDocx` OU ' +
             'de um id de template que o usuário já forneceu explicitamente. ' +
             'Se você tem múltiplos `templateId`s no contexto e não é óbvio qual usar, PERGUNTE ao usuário antes de chamar. ' +
-            'RESPOSTA: JSON com o campo `path` — caminho absoluto do PDF em disco no host da API. ' +
-            'Abra ou entregue esse arquivo diretamente; NÃO decodifique nem reprocesse o corpo da resposta.',
+            'RESPOSTA: JSON com `path` (caminho absoluto do PDF em disco) e `fileUri` (mesmo caminho no formato `file://` — muitos harnesses linkificam automaticamente). ' +
+            'Abra ou entregue o arquivo diretamente; NÃO decodifique nem reprocesse o corpo da resposta.',
           requestBody: {
             required: true,
             content: {
               'application/json': {
                 schema: {
                   type: 'object',
-                  required: ['templateId', 'markdown', 'output'],
+                  required: ['templateId', 'output'],
                   properties: {
                     templateId: {
                       type: 'string',
@@ -225,7 +336,20 @@ export function buildImportOpenApi(options: BuildOptions = {}): object {
                       type: 'string',
                       minLength: 1,
                       description:
-                        'Conteúdo do documento em Markdown. Aceita `<!-- pagebreak -->` para forçar quebra de página.',
+                        'Conteúdo do documento em Markdown. Aceita `<!-- pagebreak -->` para forçar quebra de página. ' +
+                        'ALTERNATIVO a `markdownPath` — envie exatamente um dos dois. ' +
+                        'Use este quando o conteúdo é curto ou foi gerado agora na conversa.',
+                    },
+                    markdownPath: {
+                      type: 'string',
+                      minLength: 1,
+                      description:
+                        'Caminho ABSOLUTO de um arquivo `.md` no host do servidor md2pdf. ' +
+                        'Exemplo: `C:/DEV/md2pdf/README.md` (Windows) ou `/home/user/doc.md` (Linux). ' +
+                        'ALTERNATIVO a `markdown` — envie exatamente um dos dois. ' +
+                        'PREFIRA ESTE quando o arquivo já existe em disco: o servidor lê direto, evitando transportar o conteúdo inteiro pelo pipeline do LLM. ' +
+                        'Regras iguais às de `docxPath`: caminho absoluto, resolva `@arquivo.md` para o caminho puro, converta relativo para absoluto usando o cwd do projeto.',
+                      example: 'C:/DEV/md2pdf/README.md',
                     },
                     output: {
                       type: 'string',
@@ -252,14 +376,25 @@ export function buildImportOpenApi(options: BuildOptions = {}): object {
           },
           responses: {
             '200': {
-              description: 'PDF gerado. Use o campo `path` para abrir/entregar o arquivo.',
+              description:
+                'PDF gerado. Use `path` (caminho absoluto no filesystem) OU `fileUri` (`file://...` — muitos harnesses linkificam automaticamente) para abrir/entregar o arquivo.',
               content: {
                 'application/json': {
                   schema: {
                     type: 'object',
-                    required: ['path', 'filename', 'templateId', 'pages', 'bytes'],
+                    required: ['path', 'fileUri', 'filename', 'templateId', 'pages', 'bytes'],
                     properties: {
-                      path: { type: 'string' },
+                      path: {
+                        type: 'string',
+                        description: 'Caminho absoluto do PDF em disco no host da API.',
+                      },
+                      fileUri: {
+                        type: 'string',
+                        format: 'uri',
+                        description:
+                          'Mesmo arquivo no formato `file://` — útil para harnesses (Claude Code, Cursor) que auto-linkificam URIs.',
+                        example: 'file:///C:/DEV/md2pdf/storage/outputs/documento-...pdf',
+                      },
                       filename: { type: 'string' },
                       templateId: { type: 'string' },
                       pages: { type: 'integer', minimum: 1 },
@@ -269,9 +404,71 @@ export function buildImportOpenApi(options: BuildOptions = {}): object {
                 },
               },
             },
-            '400': { description: 'Validação falhou ou markdown vazio.' },
-            '404': { description: 'Template não encontrado.' },
-            '422': { description: 'Template referencia um asset que foi removido.' },
+            '400': {
+              description:
+                'Falha de validação ou leitura. Códigos possíveis: ' +
+                '`validation_failed` (payload malformado — `markdown`/`markdownPath` ausentes ou ambos presentes, `templateId` fora do padrão, variáveis obrigatórias faltando); ' +
+                '`markdown_read_failed` (o `markdownPath` aponta para um arquivo inexistente, sem permissão, ou vazio); ' +
+                '`bad_request` como fallback genérico.',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    required: ['error', 'message'],
+                    properties: {
+                      error: {
+                        type: 'string',
+                        description: 'Código estável — use este campo, não `message`, para decidir como reagir.',
+                      },
+                      message: { type: 'string' },
+                      issues: {
+                        type: 'array',
+                        description: 'Detalhes por campo quando a origem é Zod.',
+                        items: { type: 'object' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            '404': {
+              description:
+                'Template não encontrado — o `templateId` fornecido não existe (foi removido ou nunca foi criado). ' +
+                'Rechame `importTemplateFromDocx` para regerar o template, ou peça ao usuário para confirmar o id.',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    required: ['error', 'message'],
+                    properties: {
+                      error: { type: 'string', enum: ['not_found'] },
+                      message: { type: 'string' },
+                    },
+                  },
+                },
+              },
+            },
+            '422': {
+              description:
+                'Template referencia um asset que foi removido (ex.: logo do header apagado). ' +
+                'O campo `assetId` identifica qual asset falta — reporte ao usuário para que ele reenvie a imagem ou reimporte o docx.',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    required: ['error', 'message', 'assetId'],
+                    properties: {
+                      error: { type: 'string', enum: ['asset_not_found'] },
+                      message: { type: 'string' },
+                      assetId: {
+                        type: 'string',
+                        description: 'Id do asset ausente (formato `ast_XXXXXXXXXXXX`).',
+                      },
+                    },
+                  },
+                },
+              },
+            },
           },
         },
       },

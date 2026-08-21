@@ -15,8 +15,46 @@ function mapFamily(font: string, matches: Record<string, string>): string {
 }
 
 /**
+ * Casa formatos de paginação em pt, en e es. Word grava o número já resolvido
+ * (ex.: "Page 7 of 7", "Página 3 de 10", "Pág. 1/5") — sem esse detector, o
+ * texto vira literal no template e imprime sempre o mesmo número em todas as
+ * páginas do PDF gerado.
+ *
+ * Grupos capturados:
+ *   1 = prefixo do idioma ("Page ", "Página ", "Pág. ", etc.) — pode estar ausente.
+ *   2 = número corrente
+ *   3 = separador ("of", "de", "/")
+ *   4 = total
+ *
+ * Só casa quando o total está presente — "Página 3" sozinho é ambíguo demais
+ * (pode ser conteúdo tipo "Anexo 3" ou "Página do documento") e fica como texto.
+ */
+// Grupo 1: prefixo do idioma (opcional). Grupos 2/4: números. Grupo 3: o separador
+// completo COM os espaços em volta — preservado literalmente no format final para
+// respeitar a formatação exata que o autor escreveu no Word.
+const PAGINATION_PATTERN =
+  /^\s*(P[aá]g(?:ina|\.)?\s+|Page\s+|Pg\.?\s+)?(\d+)(\s*(?:of|de|\/)\s*)(\d+)\s*$/i;
+
+/**
+ * Se `text` for uma paginação, devolve o format string do elemento pageNumber
+ * (com `{page}` e `{total}` no lugar dos números). Caso contrário, `null`.
+ * Preserva prefixo, separador, caixa e espaçamento originais.
+ */
+export function detectPaginationFormat(text: string): string | null {
+  const match = PAGINATION_PATTERN.exec(text);
+  if (!match) return null;
+  const [, prefixRaw, , separatorRaw] = match;
+  const prefix = prefixRaw ?? '';
+  const separator = separatorRaw!;
+  return `${prefix}{page}${separator}{total}`;
+}
+
+/**
  * Maps BandElements from DocxAnalysis to TemplateElements.
  * Images without a matching assetId are skipped with a warning.
+ * Text elements that look like pagination ("Page X of Y", "Página X de Y", ...)
+ * are converted to `pageNumber` elements — otherwise the number becomes a
+ * literal that shows the same value on every page.
  */
 function mapBandElements(
   band: BandData | undefined,
@@ -27,6 +65,26 @@ function mapBandElements(
   const out: unknown[] = [];
   for (const el of band.elements) {
     if (el.type === 'text') {
+      const paginationFormat = detectPaginationFormat(el.value);
+      if (paginationFormat) {
+        warnings.push({
+          code: 'PAGE_NUMBER_DETECTED',
+          message:
+            `texto "${el.value}" foi convertido em elemento de paginação dinâmica (formato "${paginationFormat}"). ` +
+            'Se estiver errado, edite manualmente no editor.',
+        });
+        out.push({
+          type: 'pageNumber',
+          format: paginationFormat,
+          align: el.align,
+          xOffsetMm: 0,
+          yMm: el.yMm,
+          bold: el.bold,
+          fontSizePt: el.fontSizePt,
+          color: el.color,
+        });
+        continue;
+      }
       out.push({
         type: 'text',
         value: el.value,

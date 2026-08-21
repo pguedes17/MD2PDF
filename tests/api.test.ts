@@ -405,6 +405,92 @@ describe('POST /api/convert', () => {
     expect(path.dirname(body.path)).toBe(path.resolve(dir, 'outputs'));
   });
 
+  it('resposta com `output: "path"` inclui `fileUri` no formato file:// apontando pro mesmo arquivo', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/convert',
+      payload: {
+        markdown: '# Doc\n\nCorpo.',
+        templateId,
+        output: 'path',
+      },
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json();
+    expect(typeof body.fileUri).toBe('string');
+    expect(body.fileUri.startsWith('file://')).toBe(true);
+    // fileURLToPath do fileUri precisa bater exatamente com o path.
+    const { fileURLToPath } = await import('node:url');
+    expect(fileURLToPath(body.fileUri)).toBe(body.path);
+  });
+
+  it('aceita `markdownPath` como alternativa a `markdown` e lê o arquivo do disco', async () => {
+    const mdFile = path.join(dir, 'inline-test.md');
+    await fs.writeFile(mdFile, '# Do disco\n\nEste texto veio de um arquivo lido pelo servidor.', 'utf8');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/convert',
+      payload: {
+        markdownPath: mdFile,
+        templateId,
+        output: 'path',
+      },
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json();
+    expect(body.pages).toBeGreaterThanOrEqual(1);
+    expect(body.bytes).toBeGreaterThan(0);
+  });
+
+  it('recusa quando faltam `markdown` e `markdownPath` — validation_failed', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/convert',
+      payload: { templateId, output: 'path' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('validation_failed');
+  });
+
+  it('recusa quando os dois vêm juntos — validation_failed', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/convert',
+      payload: {
+        templateId,
+        output: 'path',
+        markdown: '# oi',
+        markdownPath: '/tmp/qualquer.md',
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('validation_failed');
+  });
+
+  it('`markdownPath` inexistente devolve 400 com markdown_read_failed', async () => {
+    const missing = path.join(dir, 'nao-existe.md');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/convert',
+      payload: { templateId, output: 'path', markdownPath: missing },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('markdown_read_failed');
+    expect(res.json().message).toContain('não encontrado');
+  });
+
+  it('`markdownPath` relativo é rejeitado antes de tentar ler', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/convert',
+      payload: { templateId, output: 'path', markdownPath: 'relativo.md' },
+    });
+    expect(res.statusCode).toBe(400);
+    // Vem da validação Zod (validation_failed via app.ts error handler).
+    expect(res.json().error).toBe('validation_failed');
+  });
+
   it('422 quando o template aponta para um asset que sumiu', async () => {
     const orphan = await createTemplate({
       name: 'Órfão',

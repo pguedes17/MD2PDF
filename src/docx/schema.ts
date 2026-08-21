@@ -9,6 +9,7 @@ export const WarningCodeEnum = z.enum([
   'HEADER_HAS_TABLE_STYLE',
   'EVEN_PAGE_HEADER_IGNORED',
   'THEME_COLOR_FALLBACK',
+  'PAGE_NUMBER_DETECTED',
 ]);
 
 export const WarningSchema = z.object({

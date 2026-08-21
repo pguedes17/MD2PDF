@@ -45,7 +45,17 @@ export function buildTemplateOpenApi(template: Template, options: BuildOptions =
       type: 'string',
       minLength: 1,
       description:
-        'Document markdown — o conteúdo do documento em Markdown. Aceita `<!-- pagebreak -->` para forçar quebra de página.',
+        'Document markdown — o conteúdo do documento em Markdown. Aceita `<!-- pagebreak -->` para forçar quebra de página. ' +
+        'ALTERNATIVO a `markdownPath` — envie exatamente um dos dois. ' +
+        'Use este quando o conteúdo é curto ou foi gerado agora na conversa.',
+    },
+    markdownPath: {
+      type: 'string',
+      minLength: 1,
+      description:
+        'Caminho ABSOLUTO de um arquivo `.md` no host do servidor md2pdf (ex.: `C:/DEV/md2pdf/README.md`). ' +
+        'ALTERNATIVO a `markdown` — envie exatamente um dos dois. ' +
+        'PREFIRA ESTE quando o arquivo já existe em disco: o servidor lê direto, evitando transportar centenas de KB pelo pipeline do LLM.',
     },
     output: {
       type: 'string',
@@ -55,7 +65,8 @@ export function buildTemplateOpenApi(template: Template, options: BuildOptions =
         'Modo de saída. Sempre `path` — o servidor grava o PDF em disco e devolve o caminho absoluto no host da API. NÃO altere esse valor.',
     },
   };
-  const bodyRequired = ['templateId', 'markdown', 'output'];
+  // `markdown` sai do required — a validação de "um dos dois" (markdown | markdownPath) fica no servidor.
+  const bodyRequired = ['templateId', 'output'];
 
   if (variables.length > 0) {
     const varsProperties: Record<string, unknown> = {};
@@ -251,17 +262,23 @@ export function buildTemplateOpenApi(template: Template, options: BuildOptions =
           responses: {
             '200': {
               description:
-                'PDF gerado com sucesso. O arquivo já está gravado em disco no host da API — use o campo `path` para abrir/entregar o arquivo. NÃO tente decodificar o corpo da resposta.',
+                'PDF gerado com sucesso. Use `path` (caminho absoluto) OU `fileUri` (`file://...` — muitos harnesses linkificam automaticamente) para abrir/entregar. NÃO tente decodificar o corpo da resposta.',
               content: {
                 'application/json': {
                   schema: {
                     type: 'object',
-                    required: ['path', 'filename', 'templateId', 'pages', 'bytes'],
+                    required: ['path', 'fileUri', 'filename', 'templateId', 'pages', 'bytes'],
                     properties: {
                       path: {
                         type: 'string',
                         description:
                           'Caminho absoluto do PDF gerado no host da API. Abra este arquivo diretamente — não é preciso baixar nem decodificar nada.',
+                      },
+                      fileUri: {
+                        type: 'string',
+                        format: 'uri',
+                        description:
+                          'Mesmo arquivo no formato `file://` — útil para harnesses (Claude Code, Cursor) que auto-linkificam URIs.',
                       },
                       filename: {
                         type: 'string',
