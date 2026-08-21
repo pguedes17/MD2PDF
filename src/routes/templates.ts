@@ -13,6 +13,7 @@ import type { AppDeps } from '../app.js';
 import { parseOrThrow } from './validation.js';
 import { analyzeDocx } from '../docx/analyze.js';
 import { toTemplateInput } from '../docx/toTemplate.js';
+import { collectTemplateAssetIds } from '../domain/templateAssets.js';
 
 /** JSON body shape aceito pelas rotas de import — usado por agentes MCP que preferem
  *  passar um caminho absoluto no host da API em vez de fazer upload multipart. */
@@ -180,8 +181,29 @@ export async function templateRoutes(app: FastifyInstance, deps: AppDeps): Promi
   });
 
   app.delete<{ Params: { id: string } }>('/api/templates/:id', async (request, reply) => {
-    const removed = await deps.templateRepo.remove(request.params.id);
-    if (!removed) throw new TemplateNotFoundError(request.params.id);
+    const target = await deps.templateRepo.get(request.params.id);
+    if (!target) throw new TemplateNotFoundError(request.params.id);
+
+    // Coleta assets ANTES de remover — depois não teríamos como saber o que ele referenciava.
+    const owned = collectTemplateAssetIds(target);
+    const removed = await deps.templateRepo.remove(target.id);
+    if (!removed) throw new TemplateNotFoundError(target.id);
+
+    if (owned.size > 0) {
+      // Um asset pode estar compartilhado (ex.: `duplicate` reusa assetIds).
+      // Só apaga o que nenhum outro template referencia.
+      const survivors = await deps.templateRepo.list();
+      const stillUsed = new Set<string>();
+      for (const s of survivors) {
+        const other = await deps.templateRepo.get(s.id);
+        if (!other) continue;
+        for (const id of collectTemplateAssetIds(other)) stillUsed.add(id);
+      }
+      for (const assetId of owned) {
+        if (!stillUsed.has(assetId)) await deps.assetRepo.remove(assetId);
+      }
+    }
+
     return reply.code(204).send();
   });
 

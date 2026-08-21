@@ -244,6 +244,57 @@ describe('/api/templates', () => {
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toBe('validation_failed');
   });
+
+  it('DELETE remove os assets exclusivos do template', async () => {
+    const upload = await app.inject({
+      method: 'POST',
+      url: '/api/assets',
+      ...multipart('file', 'logo.png', 'image/png', PNG),
+    });
+    const { assetId } = upload.json();
+
+    const created = await createTemplate({
+      name: 'Com asset exclusivo',
+      header: {
+        heightMm: 20,
+        elements: [{ type: 'image', assetId, heightMm: 10, align: 'left', xOffsetMm: 0, yMm: 0 }],
+      },
+    });
+
+    const del = await app.inject({ method: 'DELETE', url: `/api/templates/${created.id}` });
+    expect(del.statusCode).toBe(204);
+
+    const asset = await app.inject({ method: 'GET', url: `/api/assets/${assetId}` });
+    expect(asset.statusCode).toBe(404);
+  });
+
+  it('DELETE preserva assets ainda referenciados por outro template', async () => {
+    const upload = await app.inject({
+      method: 'POST',
+      url: '/api/assets',
+      ...multipart('file', 'logo.png', 'image/png', PNG),
+    });
+    const { assetId } = upload.json();
+
+    const headerWithAsset = {
+      heightMm: 20,
+      elements: [{ type: 'image', assetId, heightMm: 10, align: 'left', xOffsetMm: 0, yMm: 0 }],
+    };
+    const a = await createTemplate({ name: 'A', header: headerWithAsset });
+    const b = await createTemplate({ name: 'B', header: headerWithAsset });
+
+    const del = await app.inject({ method: 'DELETE', url: `/api/templates/${a.id}` });
+    expect(del.statusCode).toBe(204);
+
+    // B ainda usa o asset — não pode ter sido apagado.
+    const asset = await app.inject({ method: 'GET', url: `/api/assets/${assetId}` });
+    expect(asset.statusCode).toBe(200);
+
+    // Removendo B também, agora sim o asset some.
+    await app.inject({ method: 'DELETE', url: `/api/templates/${b.id}` });
+    const after = await app.inject({ method: 'GET', url: `/api/assets/${assetId}` });
+    expect(after.statusCode).toBe(404);
+  });
 });
 
 describe('/api/assets', () => {
