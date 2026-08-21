@@ -7,7 +7,6 @@ import {
   sheetSizeMm,
   type BandName,
 } from '../lib/templateModel.js';
-import { buildTemplateOpenApi } from '../lib/templateOpenApi.js';
 
 interface PageSettingsProps {
   template: TemplateInput;
@@ -71,7 +70,6 @@ function VariablesSection({
 }) {
   const variables = collectVariables(template);
   const [copied, setCopied] = useState(false);
-  const [copiedOpenApi, setCopiedOpenApi] = useState(false);
 
   const varsBody =
     variables.length === 0
@@ -91,29 +89,6 @@ function VariablesSection({
       await navigator.clipboard.writeText(snippet);
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
-    } catch {
-      // sem clipboard permission — silenciosamente descartado
-    }
-  }
-
-  async function copyOpenApi() {
-    if (!templateId) return;
-    // Só é possível montar o OpenAPI quando o template já foi persistido
-    // — precisamos do id, dos timestamps e da versão para casar com o tipo.
-    const doc = buildTemplateOpenApi(
-      {
-        ...template,
-        id: templateId,
-        version: 2,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-      { serverUrl: window.location.origin },
-    );
-    try {
-      await navigator.clipboard.writeText(JSON.stringify(doc, null, 2));
-      setCopiedOpenApi(true);
-      setTimeout(() => setCopiedOpenApi(false), 1800);
     } catch {
       // sem clipboard permission — silenciosamente descartado
     }
@@ -155,18 +130,9 @@ function VariablesSection({
         <pre>{snippet}</pre>
       </div>
 
-      {templateId && (
-        <div style={{ marginTop: 10 }}>
-          <button
-            type="button"
-            className="btn btn--sm btn--ghost"
-            onClick={() => void copyOpenApi()}
-            title="Copia um OpenAPI 3.0.3 pronto para virar tool MCP"
-          >
-            {copiedOpenApi ? 'OpenAPI copiado' : 'Copiar OpenAPI'}
-          </button>
-        </div>
-      )}
+      <p className="hint" style={{ marginTop: 10 }}>
+        Para gerar as tools MCP (import + list + get + convert), use o botão <strong>Copiar OpenAPI</strong> no header da lista de templates.
+      </p>
     </section>
   );
 }

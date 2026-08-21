@@ -4,7 +4,6 @@ import { api, ApiError } from '../api.js';
 import { Brand, LogoMark } from '../components/Logo.js';
 import { SheetThumb } from '../components/SheetThumb.js';
 import { Icon } from '../components/Icon.js';
-import { buildTemplateOpenApi } from '../lib/templateOpenApi.js';
 import { buildImportOpenApi } from '../lib/importOpenApi.js';
 
 interface TemplateListProps {
@@ -37,8 +36,7 @@ export function TemplateList({ onOpen, onConvert }: TemplateListProps) {
   const [templates, setTemplates] = useState<Template[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
-  const [copiedOpenApi, setCopiedOpenApi] = useState<string | null>(null);
-  const [copiedImportOpenApi, setCopiedImportOpenApi] = useState(false);
+  const [copiedOpenApi, setCopiedOpenApi] = useState(false);
   const [creating, setCreating] = useState(false);
   const [importing, setImporting] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -93,18 +91,11 @@ export function TemplateList({ onOpen, onConvert }: TemplateListProps) {
     setTimeout(() => setCopied(null), 1800);
   }
 
-  async function copyOpenApi(template: Template) {
-    const doc = buildTemplateOpenApi(template, { serverUrl: window.location.origin });
-    await navigator.clipboard.writeText(JSON.stringify(doc, null, 2));
-    setCopiedOpenApi(template.id);
-    setTimeout(() => setCopiedOpenApi(null), 1800);
-  }
-
-  async function copyImportOpenApi() {
+  async function copyOpenApi() {
     const doc = buildImportOpenApi({ serverUrl: window.location.origin });
     await navigator.clipboard.writeText(JSON.stringify(doc, null, 2));
-    setCopiedImportOpenApi(true);
-    setTimeout(() => setCopiedImportOpenApi(false), 1800);
+    setCopiedOpenApi(true);
+    setTimeout(() => setCopiedOpenApi(false), 1800);
   }
 
   async function importBundle(file: File) {
@@ -154,12 +145,16 @@ export function TemplateList({ onOpen, onConvert }: TemplateListProps) {
         />
         <button
           type="button"
-          className={`btn btn--sm btn--ghost ${copiedImportOpenApi ? 'btn--icon--ok' : ''}`}
-          title={copiedImportOpenApi ? 'OpenAPI copiado!' : 'OpenAPI global: importar docx + converter com qualquer template'}
-          onClick={() => void copyImportOpenApi()}
+          className={`btn btn--sm btn--ghost ${copiedOpenApi ? 'btn--icon--ok' : ''}`}
+          title={
+            copiedOpenApi
+              ? 'OpenAPI copiado!'
+              : 'Copia o OpenAPI 3.0.3 com todas as tools MCP (import docx + list + get + convert). Cole em OAS2MCP ou equivalente.'
+          }
+          onClick={() => void copyOpenApi()}
         >
-          <Icon name={copiedImportOpenApi ? 'check' : 'braces'} />
-          {copiedImportOpenApi ? 'Copiado!' : 'Copiar OpenAPI (Word)'}
+          <Icon name={copiedOpenApi ? 'check' : 'braces'} />
+          {copiedOpenApi ? 'Copiado!' : 'Copiar OpenAPI'}
         </button>
         <button
           type="button"
@@ -293,15 +288,6 @@ export function TemplateList({ onOpen, onConvert }: TemplateListProps) {
                       onClick={() => void duplicate(template)}
                     >
                       <Icon name="files" />
-                    </button>
-                    <button
-                      type="button"
-                      className={`btn btn--icon btn--quiet ${copiedOpenApi === template.id ? 'btn--icon--ok' : ''}`}
-                      title={copiedOpenApi === template.id ? 'OpenAPI copiado' : 'Copiar OpenAPI (para tool MCP)'}
-                      aria-label="Copiar OpenAPI"
-                      onClick={() => void copyOpenApi(template)}
-                    >
-                      <Icon name={copiedOpenApi === template.id ? 'check' : 'braces'} />
                     </button>
                   </div>
 

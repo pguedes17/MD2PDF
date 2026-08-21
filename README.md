@@ -201,9 +201,10 @@ roda um scheduler que apaga automaticamente os PDFs mais antigos que
 subida do servidor. Definir qualquer um desses valores como `0` desliga a
 limpeza automática.
 
-Os botões **"Copiar OpenAPI"** no editor e na lista de templates já geram um
-spec OpenAPI 3.0.3 com `output` fixado em `"path"`, pronto para virar tool
-MCP.
+O botão **"Copiar OpenAPI"** no header da lista de templates copia um único
+spec OpenAPI 3.0.3 com TODAS as operations que viram tools MCP: importar
+docx, listar templates, ler detalhes de um template e converter markdown.
+Cole em OAS2MCP (ou equivalente) uma vez só; funciona com qualquer template.
 
 ---
 
@@ -407,15 +408,18 @@ curl -X POST http://localhost:3000/api/convert \
 
 ### Usando via MCP
 
-O botão **"Copiar OpenAPI (Word)"** na lista de templates copia um spec
-OpenAPI 3.0.3 com duas operações:
+O botão **"Copiar OpenAPI"** no header da lista de templates copia um
+único spec OpenAPI 3.0.3 com quatro operações:
 
-1. `importTemplateFromDocx` — recebe o .docx, devolve `template.id`
-2. `convertWithTemplate` — recebe `templateId` + `markdown`, devolve o path do PDF
+1. `importTemplateFromDocx` — recebe o `.docx`, devolve `template.id`
+2. `listTemplates` — lista os templates existentes (id, nome, timestamps)
+3. `getTemplate` — detalhes de um template (o agente inspeciona para descobrir `{{variáveis}}`)
+4. `convertWithTemplate` — recebe `templateId` + markdown (+ variables), devolve o path do PDF
 
-Empacotado como MCP (via qualquer ferramenta OpenAPI→MCP), habilita
-agentes (Claude, Copilot, Cursor) a fazer o fluxo completo:
-"crie um template do docx X e depois converta o markdown Y com ele".
+Cole em qualquer ferramenta OpenAPI→MCP (OAS2MCP e similares) uma vez só —
+funciona com qualquer template criado, agora e no futuro. Agentes (Claude,
+Copilot, Cursor) fazem o fluxo completo: "crie um template do docx X e
+depois converta o markdown Y com ele".
 
 ### Analisar sem persistir
 
