@@ -6,3 +6,6 @@ node_modules/
 *.log
 .env
 *.tsbuildinfo
+
+# Claude Code — permissões locais, contêm paths pessoais / grants de sessão
+.claude/settings.local.json
