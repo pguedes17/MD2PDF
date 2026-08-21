@@ -15,7 +15,7 @@ export function openDocx(buf: Buffer): DocxArchive {
     },
     bytes(path) {
       const f = zip.file(path);
-      return f ? new Uint8Array(f.asBinary().split('').map((c) => c.charCodeAt(0))) : null;
+      return f ? new Uint8Array(f.asUint8Array()) : null;
     },
     list() {
       return Object.keys(zip.files);
