@@ -73,6 +73,23 @@ describe('POST /api/templates/analyze-docx', () => {
   });
 });
 
+describe('POST /api/templates/from-docx oversize', () => {
+  it('rejeita upload acima do limite de tamanho', async () => {
+    // 21 MB of zeros — size check should trip before docx parsing
+    const oversizeBuf = Buffer.alloc(21 * 1024 * 1024, 0);
+    const mp = multipart('file', 'big.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', oversizeBuf);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/templates/from-docx',
+      payload: mp.payload,
+      headers: mp.headers,
+    });
+    // Fastify bodyLimit (10 MB) or multipart fileSize limit (20 MB) will reject;
+    // accept 413 (multipart FST_REQ_FILE_TOO_LARGE) or 400 (bodyLimit exceeded).
+    expect([400, 413]).toContain(res.statusCode);
+  });
+});
+
 describe('POST /api/templates/from-docx', () => {
   it('cria template a partir do docx real e devolve 201 com warnings', async () => {
     const mp = multipart('file', 'bionexo.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', docxBuf);
