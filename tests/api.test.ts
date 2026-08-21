@@ -244,6 +244,57 @@ describe('/api/templates', () => {
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toBe('validation_failed');
   });
+
+  it('DELETE remove os assets exclusivos do template', async () => {
+    const upload = await app.inject({
+      method: 'POST',
+      url: '/api/assets',
+      ...multipart('file', 'logo.png', 'image/png', PNG),
+    });
+    const { assetId } = upload.json();
+
+    const created = await createTemplate({
+      name: 'Com asset exclusivo',
+      header: {
+        heightMm: 20,
+        elements: [{ type: 'image', assetId, heightMm: 10, align: 'left', xOffsetMm: 0, yMm: 0 }],
+      },
+    });
+
+    const del = await app.inject({ method: 'DELETE', url: `/api/templates/${created.id}` });
+    expect(del.statusCode).toBe(204);
+
+    const asset = await app.inject({ method: 'GET', url: `/api/assets/${assetId}` });
+    expect(asset.statusCode).toBe(404);
+  });
+
+  it('DELETE preserva assets ainda referenciados por outro template', async () => {
+    const upload = await app.inject({
+      method: 'POST',
+      url: '/api/assets',
+      ...multipart('file', 'logo.png', 'image/png', PNG),
+    });
+    const { assetId } = upload.json();
+
+    const headerWithAsset = {
+      heightMm: 20,
+      elements: [{ type: 'image', assetId, heightMm: 10, align: 'left', xOffsetMm: 0, yMm: 0 }],
+    };
+    const a = await createTemplate({ name: 'A', header: headerWithAsset });
+    const b = await createTemplate({ name: 'B', header: headerWithAsset });
+
+    const del = await app.inject({ method: 'DELETE', url: `/api/templates/${a.id}` });
+    expect(del.statusCode).toBe(204);
+
+    // B ainda usa o asset — não pode ter sido apagado.
+    const asset = await app.inject({ method: 'GET', url: `/api/assets/${assetId}` });
+    expect(asset.statusCode).toBe(200);
+
+    // Removendo B também, agora sim o asset some.
+    await app.inject({ method: 'DELETE', url: `/api/templates/${b.id}` });
+    const after = await app.inject({ method: 'GET', url: `/api/assets/${assetId}` });
+    expect(after.statusCode).toBe(404);
+  });
 });
 
 describe('/api/assets', () => {
@@ -403,6 +454,92 @@ describe('POST /api/convert', () => {
     expect(buf.byteLength).toBe(body.bytes);
     // E fica dentro do outputs dir do server.
     expect(path.dirname(body.path)).toBe(path.resolve(dir, 'outputs'));
+  });
+
+  it('resposta com `output: "path"` inclui `fileUri` no formato file:// apontando pro mesmo arquivo', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/convert',
+      payload: {
+        markdown: '# Doc\n\nCorpo.',
+        templateId,
+        output: 'path',
+      },
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json();
+    expect(typeof body.fileUri).toBe('string');
+    expect(body.fileUri.startsWith('file://')).toBe(true);
+    // fileURLToPath do fileUri precisa bater exatamente com o path.
+    const { fileURLToPath } = await import('node:url');
+    expect(fileURLToPath(body.fileUri)).toBe(body.path);
+  });
+
+  it('aceita `markdownPath` como alternativa a `markdown` e lê o arquivo do disco', async () => {
+    const mdFile = path.join(dir, 'inline-test.md');
+    await fs.writeFile(mdFile, '# Do disco\n\nEste texto veio de um arquivo lido pelo servidor.', 'utf8');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/convert',
+      payload: {
+        markdownPath: mdFile,
+        templateId,
+        output: 'path',
+      },
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json();
+    expect(body.pages).toBeGreaterThanOrEqual(1);
+    expect(body.bytes).toBeGreaterThan(0);
+  });
+
+  it('recusa quando faltam `markdown` e `markdownPath` — validation_failed', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/convert',
+      payload: { templateId, output: 'path' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('validation_failed');
+  });
+
+  it('recusa quando os dois vêm juntos — validation_failed', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/convert',
+      payload: {
+        templateId,
+        output: 'path',
+        markdown: '# oi',
+        markdownPath: '/tmp/qualquer.md',
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('validation_failed');
+  });
+
+  it('`markdownPath` inexistente devolve 400 com markdown_read_failed', async () => {
+    const missing = path.join(dir, 'nao-existe.md');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/convert',
+      payload: { templateId, output: 'path', markdownPath: missing },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('markdown_read_failed');
+    expect(res.json().message).toContain('não encontrado');
+  });
+
+  it('`markdownPath` relativo é rejeitado antes de tentar ler', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/convert',
+      payload: { templateId, output: 'path', markdownPath: 'relativo.md' },
+    });
+    expect(res.statusCode).toBe(400);
+    // Vem da validação Zod (validation_failed via app.ts error handler).
+    expect(res.json().error).toBe('validation_failed');
   });
 
   it('422 quando o template aponta para um asset que sumiu', async () => {
